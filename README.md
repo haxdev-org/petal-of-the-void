@@ -37,11 +37,22 @@ godot --path game res://tools/capture.tscn -- /path/to/output
 
 ## Putting it on a phone
 
-**Android:** in Godot, go to *Editor → Manage Export Templates → Download*.
-Install the Android SDK and set its path under *Editor Settings → Export →
-Android*. Then use *Project → Export → Add… → Android* and either export an
-APK or use one-click deploy with the phone connected over USB with USB
-debugging enabled.
+**Android:** the project includes an Android export preset (`game/export_presets.cfg`:
+arm64, release, no Gradle build). One-time setup: in Godot use *Editor → Manage
+Export Templates → Download*, install the Android SDK (platform-tools and
+build-tools), and set the SDK and Java paths under *Editor Settings → Export →
+Android*. Then build:
+
+```sh
+export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=/path/to/release.keystore
+export GODOT_ANDROID_KEYSTORE_RELEASE_USER=<alias>
+export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=<password>
+cd game && godot --headless --export-release "Android" ../build/petal-of-the-void.apk
+```
+
+Never commit the keystore or its password. Android only accepts an update
+signed with the same key as the installed app; a build signed with a different
+key needs the old app uninstalled first.
 
 **iOS:** export from Godot on a Mac, then build and sign in Xcode.
 

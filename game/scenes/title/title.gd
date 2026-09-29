@@ -1,7 +1,7 @@
 extends Control
 ## Title screen over the cultivation key art, with drifting petals.
 
-const KEY_ART := "res://assets/key-art/cultivation-violet-petals.png"
+const KEY_ART := "res://assets/key-art/cultivation-violet-petals.webp"
 ## Crop out the watermark in the bottom-right corner.
 const KEY_ART_REGION := Rect2(0, 0, 1300, 710)
 

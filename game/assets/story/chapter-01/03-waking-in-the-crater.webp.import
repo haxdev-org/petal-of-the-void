@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://wi0rqqqpabaj"
-path="res://.godot/imported/03-rising-from-the-glass.png-81a6c1a5d33a41f6f48f5a8bc5d1b731.ctex"
+uid="uid://i1e8gixa52jt"
+path="res://.godot/imported/03-waking-in-the-crater.webp-84bde1d05a2af3191d28d0d608515cea.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/story/chapter-01/03-rising-from-the-glass.png"
-dest_files=["res://.godot/imported/03-rising-from-the-glass.png-81a6c1a5d33a41f6f48f5a8bc5d1b731.ctex"]
+source_file="res://assets/story/chapter-01/03-waking-in-the-crater.webp"
+dest_files=["res://.godot/imported/03-waking-in-the-crater.webp-84bde1d05a2af3191d28d0d608515cea.ctex"]
 
 [params]
 

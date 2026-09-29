@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://lh7mb5nm16kl"
-path="res://.godot/imported/cultivation-violet-petals.png-6e4eef3520712c2c0187dff56e70c4a4.ctex"
+uid="uid://clt788y1s072u"
+path="res://.godot/imported/07-system-check-integrity-91.webp-5ccf44d513b3d9bf174ae89833d0f7af.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/key-art/cultivation-violet-petals.png"
-dest_files=["res://.godot/imported/cultivation-violet-petals.png-6e4eef3520712c2c0187dff56e70c4a4.ctex"]
+source_file="res://assets/story/chapter-01/07-system-check-integrity-91.webp"
+dest_files=["res://.godot/imported/07-system-check-integrity-91.webp-5ccf44d513b3d9bf174ae89833d0f7af.ctex"]
 
 [params]
 

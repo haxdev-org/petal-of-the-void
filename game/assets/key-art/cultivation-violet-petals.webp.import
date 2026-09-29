@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bowfmwng0edqu"
-path="res://.godot/imported/02-waking-in-the-crater.png-1bfd89fe2fb6a80bf9c962d1a4db8f40.ctex"
+uid="uid://crxjodgokd6xv"
+path="res://.godot/imported/cultivation-violet-petals.webp-e4c1964ab663485852e98aa68fc7c6b3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/story/chapter-01/02-waking-in-the-crater.png"
-dest_files=["res://.godot/imported/02-waking-in-the-crater.png-1bfd89fe2fb6a80bf9c962d1a4db8f40.ctex"]
+source_file="res://assets/key-art/cultivation-violet-petals.webp"
+dest_files=["res://.godot/imported/cultivation-violet-petals.webp-e4c1964ab663485852e98aa68fc7c6b3.ctex"]
 
 [params]
 

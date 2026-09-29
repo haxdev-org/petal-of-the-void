@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dbqtr4ctwfbpf"
-path="res://.godot/imported/04-dimensional-displacement-confirmed.png-195118f82b7b88e9ba2416f194d8d04d.ctex"
+uid="uid://bnb805kwy1ui7"
+path="res://.godot/imported/08-leaving-the-crater.webp-d86ae783009c7330d5409b732a577a86.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/story/chapter-01/04-dimensional-displacement-confirmed.png"
-dest_files=["res://.godot/imported/04-dimensional-displacement-confirmed.png-195118f82b7b88e9ba2416f194d8d04d.ctex"]
+source_file="res://assets/story/chapter-01/08-leaving-the-crater.webp"
+dest_files=["res://.godot/imported/08-leaving-the-crater.webp-d86ae783009c7330d5409b732a577a86.ctex"]
 
 [params]
 

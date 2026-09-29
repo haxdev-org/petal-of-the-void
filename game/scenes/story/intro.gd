@@ -5,18 +5,25 @@ extends Control
 const DIR := "res://assets/story/chapter-01/"
 
 ## Each panel: image, crop region (drops letterbox bars and the watermark),
-## caption, and whether the caption is Baihua's diagnostic voice.
+## caption, and whether the caption is Baihua's diagnostic voice. Panels with
+## text drawn into the art use a gentler "zoom" so the text stays on screen.
 const PANELS := [
-	{ "image": "01-impact-on-broken-tooth-ridge.png", "region": Rect2(0, 0, 1300, 710),
+	{ "image": "01-falling-star-over-the-jade-canopy.webp", "region": Rect2(0, 0, 1300, 710),
 	  "text": "The sky above the Jade Canopy Mountains split open without warning.", "diagnostic": false },
-	{ "image": "02-waking-in-the-crater.png", "region": Rect2(0, 0, 1300, 710),
-	  "text": "DESIGNATION: [ERROR: FILE CORRUPTED]\nHOME COORDINATE: [ERROR: NAVIGATION MATRIX OFFLINE]", "diagnostic": true },
-	{ "image": "03-rising-from-the-glass.png", "region": Rect2(0, 0, 1300, 710),
-	  "text": "Structural integrity: 91%. Cognitive core: stable. Fusion core output: nominal.\nMemory architecture: severe damage.", "diagnostic": true },
-	{ "image": "04-dimensional-displacement-confirmed.png", "region": Rect2(0, 96, 1270, 610),
-	  "text": "Dimensional displacement confirmed. She did not know how she knew this.", "diagnostic": false },
-	{ "image": "05-leaving-the-crater.png", "region": Rect2(0, 24, 1300, 686),
-	  "text": "Dimensional variance high. Treat all data as provisional.\nShe began walking north.", "diagnostic": true },
+	{ "image": "02-impact-on-broken-tooth-ridge.webp", "region": Rect2(0, 0, 1300, 710),
+	  "text": "The streak hit the eastern slope of Broken Tooth Ridge.", "diagnostic": false },
+	{ "image": "03-waking-in-the-crater.webp", "region": Rect2(0, 0, 1300, 710),
+	  "text": "At the center of the glass, half-buried in scorched earth, a girl lay on her back with her eyes closed.", "diagnostic": false },
+	{ "image": "04-internal-query-designation-corrupted.webp", "region": Rect2(84, 0, 1250, 703), "zoom": 1.02,
+	  "text": "She ran an internal query.", "diagnostic": false },
+	{ "image": "05-rising-from-the-glass.webp", "region": Rect2(0, 0, 1300, 710),
+	  "text": "4.3 tonnes of compacted sediment across her dorsal chassis.\nHer limbs could move beneath it if she chose to move them.", "diagnostic": true },
+	{ "image": "06-dimensional-displacement-confirmed.webp", "region": Rect2(0, 96, 1270, 610),
+	  "text": "She did not know how she knew this.", "diagnostic": false },
+	{ "image": "07-system-check-integrity-91.webp", "region": Rect2(40, 60, 1260, 700), "zoom": 1.02,
+	  "text": "Not memory. Something deeper, something that had survived whatever had destroyed everything else.", "diagnostic": false },
+	{ "image": "08-leaving-the-crater.webp", "region": Rect2(0, 24, 1300, 686),
+	  "text": "North was away from the crater. Away from the impact.\nShe began walking.", "diagnostic": false },
 ]
 
 var _index := -1
@@ -33,14 +40,14 @@ func _ready() -> void:
 	var band := ColorRect.new()
 	band.color = Color(0.02, 0.02, 0.07, 0.72)
 	band.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	band.offset_top = -150
+	band.offset_top = -118
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(band)
 
 	_caption = Label.new()
 	_caption.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	_caption.offset_top = -140
-	_caption.offset_bottom = -20
+	_caption.offset_top = -112
+	_caption.offset_bottom = -12
 	_caption.offset_left = 60
 	_caption.offset_right = -60
 	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -70,7 +77,9 @@ func _next() -> void:
 		_finish()
 		return
 	var panel: Dictionary = PANELS[_index]
-	_art.show_image(DIR + panel.image, panel.region, 9.0, 1.1, Vector2(-15 if _index % 2 else 15, -10))
+	var zoom: float = panel.get("zoom", 1.1)
+	var drift := Vector2(-15 if _index % 2 else 15, -10) if zoom > 1.05 else Vector2.ZERO
+	_art.show_image(DIR + panel.image, panel.region, 9.0, zoom, drift)
 	_art.modulate.a = 0.0
 	_art.create_tween().tween_property(_art, "modulate:a", 1.0, 0.7)
 	_caption.text = panel.text

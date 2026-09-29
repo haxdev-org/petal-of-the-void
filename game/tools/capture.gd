@@ -5,6 +5,8 @@ extends Node
 const SHOTS := [
 	{ "scene": SceneRouter.TITLE, "wait": 2.5, "name": "01-title" },
 	{ "scene": SceneRouter.INTRO, "wait": 3.5, "name": "02-intro" },
+	{ "scene": SceneRouter.INTRO, "wait": 3.5, "name": "02b-intro-panel-4", "advance": 3 },
+	{ "scene": SceneRouter.INTRO, "wait": 3.5, "name": "02c-intro-panel-7", "advance": 6 },
 	{ "scene": SceneRouter.FIELD, "wait": 2.5, "name": "03-field" },
 	{ "scene": SceneRouter.BATTLE, "wait": 5.0, "name": "04-battle", "encounter": &"ridge_wolves" },
 	{ "scene": SceneRouter.BATTLE, "wait": 5.0, "name": "05-battle-bear", "encounter": &"ridge_bear" },
@@ -27,6 +29,10 @@ func _ready() -> void:
 		GameState.pending_encounter = { "id": shot.get("encounter", &"ridge_wolves") }
 		get_tree().change_scene_to_file(shot.scene)
 		await get_tree().create_timer(shot.wait).timeout
+		for i in shot.get("advance", 0):
+			get_tree().current_scene._next()
+		if shot.has("advance"):
+			await get_tree().create_timer(3.0).timeout
 		if shot.has("stellar"):
 			# Force the player's turn into a Stellar Discharge to preview the effect.
 			var battle := get_tree().current_scene

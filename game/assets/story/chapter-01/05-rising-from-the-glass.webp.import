@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cxs3n0k06vkwu"
-path="res://.godot/imported/01-impact-on-broken-tooth-ridge.png-ad1956dda22b2070032cd3ae3f8de954.ctex"
+uid="uid://c0o2nllaxwhun"
+path="res://.godot/imported/05-rising-from-the-glass.webp-d65340b421441f33c334e86fceb9ac11.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/story/chapter-01/01-impact-on-broken-tooth-ridge.png"
-dest_files=["res://.godot/imported/01-impact-on-broken-tooth-ridge.png-ad1956dda22b2070032cd3ae3f8de954.ctex"]
+source_file="res://assets/story/chapter-01/05-rising-from-the-glass.webp"
+dest_files=["res://.godot/imported/05-rising-from-the-glass.webp-d65340b421441f33c334e86fceb9ac11.ctex"]
 
 [params]
 

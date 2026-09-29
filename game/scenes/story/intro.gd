@@ -57,7 +57,7 @@ func _ready() -> void:
 	add_child(_caption)
 
 	var skip := UITheme.button("Skip", _finish, 140)
-	skip.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 20)
+	UITheme.pin_top_right(skip, 140, 72)
 	add_child(skip)
 	_next()
 

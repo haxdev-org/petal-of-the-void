@@ -75,6 +75,19 @@ static func bar(fill: Color) -> ProgressBar:
 	return pb
 
 
+## Pin a control to the top-right corner with a fixed size (safe from
+## min-size changes when the theme font loads).
+static func pin_top_right(control: Control, width: float, height: float, margin := 20.0) -> void:
+	control.anchor_left = 1.0
+	control.anchor_right = 1.0
+	control.anchor_top = 0.0
+	control.anchor_bottom = 0.0
+	control.offset_left = -width - margin
+	control.offset_right = -margin
+	control.offset_top = margin
+	control.offset_bottom = margin + height
+
+
 static func button(text: String, callback: Callable, min_width := 200) -> Button:
 	var b := Button.new()
 	b.text = text

@@ -43,31 +43,61 @@ character, same outfit, same style". This keeps her on-model.
 indigo wash, looking slightly off-camera"* in five expressions: neutral,
 assessing, faint surprise, troubled, and gentle (rare).
 
-## Sprite spec (in-world)
+## In-world sprites: rendered from 3D, eight facings
 
-- Characters about **48–64 px tall**, drawn at 1x, rendered with nearest-
-  neighbour filtering. Limited palette (16–24 colours per character).
-- Animations: idle (4 frames), walk (6–8 frames per direction, 4 directions or
-  mirrored 2), attack, cast, hurt, down. Battle poses face right (party) and
-  left (enemies).
-- Export as horizontal strips per animation, e.g.
-  `art/characters/baihua/walk_down.png`.
-- AI image tools help with concept and turnarounds, but walk and attack cycles
-  need hand clean-up in Aseprite. Budget time or a pixel artist for this.
+The in-world characters follow the Infinity Engine recipe (Baldur's Gate):
+each character is a simple 3D model that is rendered from the game's exact
+camera (orthographic, 42 degrees down) at 8 facings and turned into pixel
+art. That is what gives Baldur's Gate sprites their look, and it keeps
+Baihua's armour, hair and robe consistent from every angle without drawing
+dozens of frames by hand.
 
-**Sprite prompt (for concept only):**
+Pipeline (all in `game/tools/`):
 
-> *Pixel art character sprite sheet, 64x64 pixel grid, limited 24-colour
-> palette, front / side / back views, no anti-aliasing, transparent background,
-> JRPG HD-2D style, [character description]*
+1. `blender_sprites.py` builds the characters from primitives inside
+   Blender (Baihua in the cracked chassis and in the robe, the acid-fang
+   wolf, the quill-bear), poses each animation frame, and renders every
+   frame at 8 facings, twice: lit (Cycles, one sun from the camera's upper
+   left plus soft ambient) and as flat material IDs.
+2. `post_sprites.py` downsamples the 2x renders, looks up each pixel's
+   material, quantises its brightness onto that material's 5-tone
+   hue-shifted ramp, adds the selective outline and writes the sheets plus
+   a JSON sidecar. The wolf-demon is the wolf with a palette swap.
+3. The game (`core/sprite_sheets.gd`) loads `assets/sprites/<id>.png`
+   + `.json`; animations are named `<anim>_<dir>` with dir 0 = screen
+   right, counter-clockwise (2 = away from the camera, 6 = toward it).
 
-## Environments
+Scale: 44 px per metre. Baihua is 1.64 m; the wolf-demon is rendered from
+the wolf model and displayed 3x larger.
 
-Build dioramas from modular low-poly pieces with painted textures: rocks,
-pines, bamboo, stone paths, sect architecture. Keep scenes small and enclosed
-(ridges, forest walls, courtyards) so the camera never shows an empty horizon.
-Fog and particles sell the depth. Environment concept paintings in the
-illustration style are the best brief for each area.
+Re-render everything with:
+
+```sh
+blender --background --python tools/blender_sprites.py -- /tmp/renders
+python3 tools/post_sprites.py /tmp/renders
+```
+
+To improve a character, edit its model or poses in `blender_sprites.py`;
+to change its colours, edit `MATERIALS` in both scripts.
+
+## Environment art
+
+Ground, rock and bark are 128 px tileable pixel textures with normal maps
+(`gen_textures.py`), one tile per 1.45 m; a large soft "macro" variation is
+multiplied over the ground so the repeat never shows. Props are low-poly
+Blender models (`blender_props.py`: pines, boulders, cliffs, the impact
+crater, fallen logs, stumps) textured in-game by mesh name. Decals
+(scorched clearing, path, pebbles) are soft-edged quads laid on the ground.
+
+The crater is real terrain: `HD2D.crater_height()` mirrors the profile
+used to build the mesh so Baihua walks down into the bowl.
+
+## Camera
+
+Fixed isometric view like Baldur's Gate: yaw 45 degrees, pitch 42 degrees,
+orthographic (`HD2D.build_iso_camera`). The horizon is never on screen, so
+maps need a dense treeline or cliffs at their edges rather than a skybox.
+Fog, light shafts, petals and a vignette add depth.
 
 ## Watermarks
 

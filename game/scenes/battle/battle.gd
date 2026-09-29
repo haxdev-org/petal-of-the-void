@@ -4,10 +4,12 @@ extends Node3D
 
 signal _command_chosen(skill: SkillData, target: Combatant)
 
-const PARTY_SLOTS := [Vector3(-3.4, 0, 0.6)]
-const ENEMY_SLOTS := [
-	Vector3(0.6, 0, 0.3), Vector3(2.0, 0, -1.0), Vector3(1.9, 0, 1.5), Vector3(3.3, 0, 0.2),
-]
+## Slots in screen space (right, up along the ground), converted to world
+## positions with HD2D.iso_right/iso_up. Party on the left, enemies right.
+const PARTY_SLOTS := [Vector2(-3.6, 0.0)]
+const ENEMY_SLOTS := [Vector2(1.4, 0.0), Vector2(3.0, 1.4), Vector2(3.2, -1.3), Vector2(4.8, 0.2)]
+const CAMERA_SIZE := 9.5
+const SUN_ANGLES := Vector3(-44, -50, 0)
 const TAP_RADIUS := 130.0
 
 var system: BattleSystem
@@ -59,30 +61,52 @@ func _ready() -> void:
 func _build_stage() -> void:
 	HD2D.build_environment(self, {
 		"sky_top": Color("1b1838"), "sky_horizon": Color("d88f62"), "fog": Color("4a3a60"),
-		"fog_density": 0.012,
+		"fog_density": 0.009, "ambient": 0.8,
 	})
-	HD2D.build_sun(self, Color("ffc58f"), 1.4, Vector3(-30, -60, 0))
-	var ground := PlaneMesh.new()
-	ground.size = Vector2(40, 30)
-	HD2D.add_mesh(self, ground, HD2D.material(Color("2d3128")), Vector3.ZERO)
-	var clearing := CylinderMesh.new()
-	clearing.top_radius = 5.5
-	clearing.bottom_radius = 5.5
-	clearing.height = 0.02
-	HD2D.add_mesh(self, clearing, HD2D.material(Color("4a4536")), Vector3(0.5, 0.005, 0.2))
+	HD2D.build_sun(self, Color("ffc58f"), 1.6, SUN_ANGLES)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 42
-	for i in 22:
-		var pos := Vector3(rng.randf_range(-12, 12), 0, rng.randf_range(-10, -3.5))
-		HD2D.add_pine(self, pos, rng.randf_range(3.0, 6.0))
-	for i in 6:
-		HD2D.add_rock(self, Vector3(rng.randf_range(-8, 8), 0, rng.randf_range(-4, -2.5)), rng.randf_range(0.6, 1.4), rng)
-	HD2D.add_petals(self, Vector3(9, 3, 5), 90).position = Vector3(0, 3.5, 0)
+	HD2D.add_ground(self, "grass", Vector2(80, 80))
+	# Trodden clearing where the fight happens, aligned with the screen.
+	HD2D.add_decal(self, "clearing", Vector2(17, 12), Vector3(0.6, 0, 0), 45)
+	var up := HD2D.iso_up()
+	var right := HD2D.iso_right()
+	# Treeline curving around the top of the screen and down both sides.
+	var trees: Array[Vector3] = []
+	for i in 34:
+		var a := rng.randf_range(0.15, PI - 0.15)
+		var r := rng.randf_range(7.5, 13.0)
+		var pos := right * cos(a) * r + up * sin(a) * r * 0.75
+		var too_close := false
+		for t in trees:
+			if t.distance_to(pos) < 2.0:
+				too_close = true
+				break
+		if too_close:
+			continue
+		trees.append(pos)
+		HD2D.add_pine(self, pos, rng.randf_range(3.8, 7.0), rng)
+	for i in 7:
+		var a := rng.randf_range(0.2, PI - 0.2)
+		var r := rng.randf_range(5.5, 7.5)
+		HD2D.add_rock(self, right * cos(a) * r + up * sin(a) * r * 0.7, rng.randf_range(0.5, 1.1), rng)
+	HD2D.add_undergrowth(self, rng, Rect2(-16, -16, 32, 32), 220, func(p: Vector3) -> bool:
+		var sx := p.dot(right)
+		var sy := p.dot(up)
+		return absf(sx) > 6.0 or absf(sy) > 3.6)
+	HD2D.add_ground_detail(self, rng, Rect2(-14, -14, 28, 28), 40, func(p: Vector3) -> bool:
+		return absf(p.dot(right)) > 5.0 or absf(p.dot(up)) > 3.0)
+	var shafts: Array = []
+	for i in 4:
+		shafts.append(right * rng.randf_range(-7, 7) + up * rng.randf_range(2, 7))
+	HD2D.add_light_shafts(self, rng, shafts, SUN_ANGLES)
+	HD2D.add_petals(self, Vector3(10, 3, 10), 110).position = Vector3(0, 3.5, 0)
+	HD2D.add_post_overlay(self, 0.5)
 
 	for i in system.party.size():
-		_add_actor(system.party[i], PARTY_SLOTS[i], false)
+		_add_actor(system.party[i], _slot(PARTY_SLOTS[i]), false)
 	for i in system.enemies.size():
-		_add_actor(system.enemies[i], ENEMY_SLOTS[i], true)
+		_add_actor(system.enemies[i], _slot(ENEMY_SLOTS[i]), true)
 
 	var ring := TorusMesh.new()
 	ring.inner_radius = 0.55
@@ -90,20 +114,22 @@ func _build_stage() -> void:
 	_selector = HD2D.add_mesh(self, ring, HD2D.material(UITheme.GOLD, 0.5, 0.0, UITheme.GOLD, 2.5), Vector3.ZERO)
 	_selector.visible = false
 
-	_camera = Camera3D.new()
-	_camera.fov = 36
-	_camera_home = Vector3(0.6, 3.6, 10.5)
-	_camera.position = _camera_home
-	add_child(_camera)
-	_camera.look_at(Vector3(0.6, 0.2, 0))
-	_camera.attributes = HD2D.build_camera_attributes(_camera_home.length())
+	_camera = HD2D.build_iso_camera(self, Vector3(0.4, 0.9, 0), CAMERA_SIZE)
+	_camera_home = _camera.position
+
+
+func _slot(screen: Vector2) -> Vector3:
+	return HD2D.iso_right() * screen.x + HD2D.iso_up() * screen.y
 
 
 func _add_actor(c: Combatant, pos: Vector3, is_enemy: bool) -> void:
-	var node := HD2D.make_sprite_actor(PixelArt.texture(c.data.sprite_id), c.data.sprite_scale * (1.25 if not is_enemy else 1.0), false)
+	var id: StringName = c.data.sprite_id if is_enemy else SpriteSheets.player_id()
+	var node := SpriteSheets.make_actor(id)
 	node.position = pos
 	add_child(node)
 	_actors[c] = node
+	# Party faces screen-right toward the enemies, enemies face left.
+	SpriteSheets.set_dir(node.get_node("Sprite"), 4 if is_enemy else 0)
 	if is_enemy:
 		var label := Label3D.new()
 		label.font_size = 26
@@ -111,17 +137,20 @@ func _add_actor(c: Combatant, pos: Vector3, is_enemy: bool) -> void:
 		label.pixel_size = 0.005
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.no_depth_test = true
-		var sprite: Sprite3D = node.get_node("Sprite")
-		label.position = Vector3(0, sprite.texture.get_height() * sprite.pixel_size + 0.35, 0)
+		label.position = Vector3(0, SpriteSheets.height_m(id) + 0.45, 0)
 		node.add_child(label)
 		_name_labels[c] = label
+
+
+func _sprite(c: Combatant) -> AnimatedSprite3D:
+	return _actors[c].get_node("Sprite")
 
 
 func _process(delta: float) -> void:
 	_time += delta
 	# Slow handheld drift keeps the diorama feeling alive.
-	var drift := Vector3(sin(_time * 0.35) * 0.12, sin(_time * 0.5) * 0.05, 0)
-	var shake := Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake
+	var drift := _camera.basis.x * sin(_time * 0.35) * 0.1 + _camera.basis.y * sin(_time * 0.5) * 0.04
+	var shake := (_camera.basis.x * randf_range(-1, 1) + _camera.basis.y * randf_range(-1, 1)) * _shake
 	_shake = move_toward(_shake, 0.0, delta * 1.2)
 	_camera.position = _camera_home + drift + shake
 	if _selector.visible:
@@ -430,13 +459,15 @@ func _animate(result: Dictionary) -> void:
 	var home := node.position
 	var hits: Array = result.hits
 
+	var sprite := _sprite(actor)
 	match skill.kind:
 		SkillData.Kind.PHYSICAL:
 			var dest := home
 			if hits.size() == 1:
 				dest = home.lerp(_actors[hits[0].target].position, 0.7)
 			else:
-				dest = home + Vector3(-1.0 if not actor.is_player else 1.0, 0, 0)
+				dest = home + HD2D.iso_right() * (1.0 if actor.is_player else -1.0)
+			SpriteSheets.play_then_idle(sprite, &"attack")
 			var t := create_tween()
 			t.tween_property(node, "position", dest, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 			await t.finished
@@ -445,12 +476,15 @@ func _animate(result: Dictionary) -> void:
 			t.tween_property(node, "position", home, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 			await t.finished
 		SkillData.Kind.QI:
+			SpriteSheets.play_then_idle(sprite, &"cast")
 			await _cast_glow(node, skill.fx_color, 0.35)
 			await _projectiles(node.position, hits, skill.fx_color)
 			_apply_hits(hits, skill)
 		SkillData.Kind.STELLAR:
+			SpriteSheets.play_then_idle(sprite, &"cast")
 			await _stellar_discharge(node, hits, skill)
 		SkillData.Kind.HEAL:
+			SpriteSheets.play_then_idle(sprite, &"cast")
 			await _cast_glow(node, skill.fx_color, 0.5)
 			_apply_hits(hits, skill)
 		SkillData.Kind.GUARD:
@@ -478,12 +512,29 @@ func _apply_hits(hits: Array, skill: SkillData) -> void:
 		if hit.status != &"":
 			HD2D.pop_label(self, node.position + Vector3(0.4, 2.2, 0), String(hit.status).capitalize(), skill.fx_color, 40)
 		_flash(target, Color(2.0, 0.6, 0.5))
+		if target.is_alive():
+			_hurt(target)
 		_shake = maxf(_shake, 0.06)
 	_refresh()
 
 
+## Hurt pose with a small knock-back, then back to idle.
+func _hurt(c: Combatant) -> void:
+	var sprite := _sprite(c)
+	var node: Node3D = _actors[c]
+	var home := node.position
+	var push := HD2D.iso_right() * (0.35 if not c.is_player else -0.35)
+	SpriteSheets.play(sprite, &"hurt")
+	var t := create_tween()
+	t.tween_property(node, "position", home + push, 0.08)
+	t.tween_property(node, "position", home, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.tween_callback(func() -> void:
+		if SpriteSheets.is_playing(sprite, &"hurt"):
+			SpriteSheets.play(sprite, &"idle"))
+
+
 func _flash(c: Combatant, color: Color) -> void:
-	var sprite: Sprite3D = _actors[c].get_node("Sprite")
+	var sprite := _sprite(c)
 	var t := create_tween()
 	t.tween_property(sprite, "modulate", color, 0.06)
 	t.tween_property(sprite, "modulate", Color.WHITE, 0.2)
@@ -536,7 +587,7 @@ func _projectiles(from: Vector3, hits: Array, color: Color) -> void:
 ## column of raw fusion output.
 func _stellar_discharge(node: Node3D, hits: Array, skill: SkillData) -> void:
 	_log("Regulator override. Thermal threshold climbing.")
-	var sprite: Sprite3D = node.get_node("Sprite")
+	var sprite: AnimatedSprite3D = node.get_node("Sprite")
 	var charge := _glow_orb(skill.fx_color, 0.1)
 	charge.position = node.position + Vector3(0.2, 1.0, 0)
 	var t := create_tween().set_parallel(true)
@@ -545,37 +596,48 @@ func _stellar_discharge(node: Node3D, hits: Array, skill: SkillData) -> void:
 	t.tween_property(self, "_shake", 0.05, 1.0)
 	await t.finished
 
-	var beam_mesh := CylinderMesh.new()
-	beam_mesh.top_radius = 0.35
-	beam_mesh.bottom_radius = 0.35
-	beam_mesh.height = 1.0
-	var beam_mat := HD2D.material(Color(1, 0.9, 0.6), 0.3, 0.0, skill.fx_color, 8.0)
-	beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var beam := HD2D.add_mesh(self, beam_mesh, beam_mat, Vector3.ZERO)
+	# The column: a bright core with a soft additive halo, from her palm outward.
 	var start := charge.position
-	var end := start + Vector3(9.0, 0, 0)
-	beam.position = (start + end) / 2.0
-	beam.rotation_degrees = Vector3(0, 0, 90)
-	beam.scale = Vector3(1, 0.01, 1)
+	var end := start + HD2D.iso_right() * 9.0
+	var beams: Array[MeshInstance3D] = []
+	for layer: Array in [[0.09, 1.0, false], [0.28, 0.35, true]]:
+		var beam_mesh := CylinderMesh.new()
+		beam_mesh.top_radius = layer[0]
+		beam_mesh.bottom_radius = layer[0]
+		beam_mesh.height = 1.0
+		var beam_mat := HD2D.material(Color(1, 0.9, 0.6, layer[1]), 0.3, 0.0, skill.fx_color, 8.0)
+		beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		if layer[2]:
+			beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		var b := HD2D.add_mesh(self, beam_mesh, beam_mat, (start + end) / 2.0)
+		b.look_at_from_position(b.position, end, Vector3.UP)
+		b.rotate_object_local(Vector3.RIGHT, PI / 2.0)
+		b.scale = Vector3(1, 0.01, 1)
+		beams.append(b)
+	var beam := beams[0]
 	var flash := OmniLight3D.new()
 	flash.light_color = skill.fx_color
 	flash.light_energy = 12.0
 	flash.omni_range = 14.0
-	flash.position = Vector3(1.5, 2.0, 1.0)
+	flash.position = HD2D.iso_right() * 2.0 + Vector3(0, 2.0, 0)
 	add_child(flash)
 	_shake = 0.3
-	t = create_tween()
-	t.tween_property(beam, "scale", Vector3(1, (end - start).length(), 1), 0.12)
+	t = create_tween().set_parallel(true)
+	for b in beams:
+		t.tween_property(b, "scale", Vector3(1, (end - start).length(), 1), 0.12)
 	await t.finished
 	_apply_hits(hits, skill)
 	t = create_tween().set_parallel(true)
-	t.tween_property(beam, "scale:x", 0.01, 0.6).set_delay(0.3)
-	t.tween_property(beam, "scale:z", 0.01, 0.6).set_delay(0.3)
+	for b in beams:
+		t.tween_property(b, "scale:x", 0.01, 0.6).set_delay(0.3)
+		t.tween_property(b, "scale:z", 0.01, 0.6).set_delay(0.3)
 	t.tween_property(flash, "light_energy", 0.0, 0.9)
 	t.tween_property(charge, "scale", Vector3.ONE * 0.01, 0.4)
 	t.tween_property(sprite, "modulate", Color.WHITE, 1.2)
 	await t.finished
-	beam.queue_free()
+	for b in beams:
+		b.queue_free()
 	flash.queue_free()
 	charge.queue_free()
 	_log("Emergency cooling: full capacity. Heat vented.")
@@ -585,7 +647,8 @@ func _defeat_actor(c: Combatant) -> void:
 	var node: Node3D = _actors[c]
 	if not node.visible:
 		return
-	var sprite: Sprite3D = node.get_node("Sprite")
+	var sprite: AnimatedSprite3D = node.get_node("Sprite")
+	SpriteSheets.play(sprite, &"hurt")
 	var t := create_tween().set_parallel(true)
 	t.tween_property(sprite, "modulate", Color(1.5, 0.4, 0.4, 0.0), 0.5)
 	t.tween_property(node, "position:y", -0.3, 0.5)

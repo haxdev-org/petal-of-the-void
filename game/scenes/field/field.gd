@@ -1,13 +1,14 @@
 extends Node3D
 ## Broken Tooth Ridge, eastern slope: the crater where Baihua landed
-## (Chapter One). A gray-box diorama that shows the HD-2D look, tap-to-move and
-## joystick controls, and hands off to the battle scene through encounters.
+## (Chapter One). A fixed isometric diorama with tap-to-move and joystick
+## controls that hands off to the battle scene through encounters.
 
 const MOVE_SPEED := 4.2
-const BOUNDS := Rect2(-15, -24, 30, 32)
-const CAMERA_OFFSET := Vector3(0, 10.5, 13.5)
+const BOUNDS := Rect2(-16, -26, 32, 34)
 const ENCOUNTER_RADIUS := 2.0
 const START_POSITION := Vector3(0, 0, 4.5)
+const CAMERA_SIZE := 11.0
+const SUN_ANGLES := Vector3(-48, -30, 0)
 
 ## Encounter id -> marker position.
 const ENCOUNTERS := {
@@ -17,12 +18,11 @@ const ENCOUNTERS := {
 }
 
 var _player: Node3D
-var _player_sprite: Sprite3D
+var _player_sprite: AnimatedSprite3D
 var _camera: Camera3D
 var _move_target: Variant = null
 var _obstacles: Array[Vector3] = [] # x, z = centre, y = radius
 var _markers: Dictionary = {}
-var _walk_time := 0.0
 var _in_transition := false
 
 var _joystick: TouchJoystick
@@ -34,18 +34,18 @@ var _target_ring: MeshInstance3D
 
 
 func _ready() -> void:
-	HD2D.build_environment(self)
-	HD2D.build_sun(self)
+	HD2D.build_environment(self, {
+		"sky_top": Color("1a1a3f"), "sky_horizon": Color("d8946c"), "fog": Color("4a4262"),
+		"fog_density": 0.007, "ambient": 0.8,
+	})
+	HD2D.build_sun(self, Color("ffd2a0"), 1.6, SUN_ANGLES)
 	_build_terrain()
 	_build_player()
 	_build_markers()
-	HD2D.add_petals(self, Vector3(14, 3, 14), 140).position = Vector3(0, 4, -8)
+	HD2D.add_petals(self, Vector3(16, 3, 16), 160).position = Vector3(0, 4, -8)
+	HD2D.add_post_overlay(self, 0.5)
 
-	_camera = Camera3D.new()
-	_camera.fov = 30
-	_camera.attributes = HD2D.build_camera_attributes(CAMERA_OFFSET.length())
-	add_child(_camera)
-	_update_camera(1.0)
+	_camera = HD2D.build_iso_camera(self, _player.position + Vector3(0, 0.8, 0), CAMERA_SIZE)
 	_build_hud()
 	_show_intro()
 
@@ -53,58 +53,97 @@ func _ready() -> void:
 # --- World -----------------------------------------------------------------
 
 func _build_terrain() -> void:
-	var ground := PlaneMesh.new()
-	ground.size = Vector2(60, 70)
-	HD2D.add_mesh(self, ground, HD2D.material(Color("2c3029")), Vector3(0, 0, -8))
-
-	# The path north, worn lighter.
-	var path := PlaneMesh.new()
-	path.size = Vector2(2.4, 30)
-	HD2D.add_mesh(self, path, HD2D.material(Color("5a5040")), Vector3(0, 0.01, -12))
-
-	# The crater: rock vitrified to black glass, still faintly hot at the centre.
-	var glass := CylinderMesh.new()
-	glass.top_radius = 3.2
-	glass.bottom_radius = 3.6
-	glass.height = 0.12
-	HD2D.add_mesh(self, glass, HD2D.material(Color("0b0a12"), 0.06, 0.3), Vector3(0, 0.02, 0))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1
-	for i in 7:
-		var crack := BoxMesh.new()
-		crack.size = Vector3(rng.randf_range(1.2, 2.6), 0.02, 0.06)
-		var angle := i * TAU / 7.0 + rng.randf_range(-0.2, 0.2)
-		var mat := HD2D.material(Color("ff9a3c"), 0.5, 0.0, Color("ff8a2a"), 3.0)
-		HD2D.add_mesh(self, crack, mat, Vector3(cos(angle), 0.1, sin(angle)) * 1.2, Vector3(0, -rad_to_deg(angle), 0))
-	var ember := OmniLight3D.new()
-	ember.light_color = Color("ff9a4a")
-	ember.light_energy = 1.6
-	ember.omni_range = 6.0
-	ember.position = Vector3(0, 0.5, 0)
-	add_child(ember)
-	var flicker := ember.create_tween().set_loops()
-	flicker.tween_property(ember, "light_energy", 1.1, 1.3).set_trans(Tween.TRANS_SINE)
-	flicker.tween_property(ember, "light_energy", 1.8, 1.1).set_trans(Tween.TRANS_SINE)
+	HD2D.add_ground(self, "grass", Vector2(100, 100), Vector3(0, 0, -8), 7.0, Vector3.ZERO)
+	# Scorched earth around the impact, then the vitrified glass itself.
+	HD2D.add_crater(self, Vector3.ZERO)
+	# Scorched, trampled ground around the blanket (kept outside the bowl).
+	for i in 10:
+		var a := i * TAU / 10.0 + rng.randf_range(-0.2, 0.2)
+		var r := rng.randf_range(8.0, 11.0)
+		var s := rng.randf_range(4.0, 7.0)
+		var d := HD2D.add_decal(self, "clearing", Vector2(s, s * 0.8), Vector3(cos(a) * r, 0, sin(a) * r), rng.randf_range(0, 360), 0.006)
+		d.material_override.albedo_color = Color(1, 1, 1, rng.randf_range(0.6, 0.9))
+	# The path north, worn through the grass.
+	HD2D.add_path(self, 2.8, 30, Vector3(0, 0, -17))
 
-	# Ridge walls and forest, kept off the path and away from the crater.
-	for i in 38:
-		var pos := Vector3(rng.randf_range(-15, 15), 0, rng.randf_range(-26, 8))
-		if absf(pos.x) < 2.5 or pos.length() < 5.0 or _near_marker(pos, 3.5):
+	# Thrown rock on the rim, and trees snapped outward in a radial pattern.
+	for i in 14:
+		var a := i * TAU / 14.0 + rng.randf_range(-0.15, 0.15)
+		var r := rng.randf_range(3.9, 5.0)
+		var pos := Vector3(cos(a) * r, 0, sin(a) * r)
+		if absf(pos.x) < 1.8 and pos.z < 0:
 			continue
-		if rng.randf() < 0.6:
-			var h := rng.randf_range(2.5, 5.0)
-			HD2D.add_pine(self, pos, h)
-			_obstacles.append(Vector3(pos.x, 0.45, pos.z))
+		var size := rng.randf_range(0.25, 0.55)
+		pos.y = HD2D.crater_height(r) - 0.05
+		HD2D.add_rock(self, pos, size, rng)
+		_obstacles.append(Vector3(pos.x, size * 0.6, pos.z))
+	for i in 9:
+		var a := i * TAU / 9.0 + rng.randf_range(-0.25, 0.25)
+		var r := rng.randf_range(6.5, 10.0)
+		var pos := Vector3(cos(a) * r, 0, sin(a) * r)
+		if absf(pos.x) < 2.4 and pos.z < 0 or _near_marker(pos, 3.0) or pos.distance_to(START_POSITION) < 2.5:
+			continue
+		var variant := rng.randi_range(0, 2)
+		var length: float = [4.0, 5.5, 7.0][variant]
+		# Logs lie pointing away from the impact; their broken end faces it.
+		var yaw := rad_to_deg(atan2(pos.x, pos.z))
+		pos.y = HD2D.crater_height(r) * 0.5
+		HD2D.add_prop(self, "log_%d" % variant, pos, yaw + rng.randf_range(-12, 12))
+		var dir := Vector3(sin(deg_to_rad(yaw)), 0, cos(deg_to_rad(yaw)))
+		for k in 3:
+			var c := pos + dir * length * (0.15 + 0.35 * k)
+			_obstacles.append(Vector3(c.x, 0.55, c.z))
+		var stump_pos := pos + dir * rng.randf_range(-0.8, -0.2) + Vector3(rng.randf_range(-0.6, 0.6), 0, 0)
+		HD2D.add_prop(self, "stump_%d" % (i % 2), stump_pos, rng.randf_range(0, 360))
+		_obstacles.append(Vector3(stump_pos.x, 0.45, stump_pos.z))
+
+	# Forest and boulders, kept off the path, out of the crater and clear of the encounters.
+	var tree_positions: Array[Vector3] = []
+	for i in 70:
+		var pos := Vector3(rng.randf_range(BOUNDS.position.x, BOUNDS.end.x), 0, rng.randf_range(BOUNDS.position.y, BOUNDS.end.y))
+		if absf(pos.x) < 2.6 or pos.length() < 6.5 or _near_marker(pos, 3.5) or pos.distance_to(START_POSITION) < 3.0:
+			continue
+		var too_close := false
+		for t in tree_positions:
+			if t.distance_to(pos) < 2.2:
+				too_close = true
+				break
+		if too_close:
+			continue
+		if rng.randf() < 0.7:
+			var h := rng.randf_range(3.6, 7.0)
+			HD2D.add_pine(self, pos, h, rng)
+			_obstacles.append(Vector3(pos.x, 0.5, pos.z))
+			tree_positions.append(pos)
 		else:
-			var s := rng.randf_range(0.8, 2.0)
+			var s := rng.randf_range(0.5, 1.2)
 			HD2D.add_rock(self, pos, s, rng)
-			_obstacles.append(Vector3(pos.x, s * 0.6, pos.z))
-	# Distant peaks of the Jade Canopy range, softened by fog.
-	for i in 7:
-		var peak := PrismMesh.new()
-		peak.size = Vector3(rng.randf_range(10, 18), rng.randf_range(8, 16), 6)
-		HD2D.add_mesh(self, peak, HD2D.material(Color("3a3f5a")),
-			Vector3(-30 + i * 10 + rng.randf_range(-3, 3), peak.size.y / 2.0, -40 - rng.randf_range(0, 8)))
+			_obstacles.append(Vector3(pos.x, s * 0.65, pos.z))
+	# Dense treeline just outside the walkable area so the edges never look empty.
+	for i in 40:
+		var side := rng.randi_range(0, 3)
+		var pos: Vector3
+		match side:
+			0: pos = Vector3(BOUNDS.position.x - rng.randf_range(0.5, 4.0), 0, rng.randf_range(BOUNDS.position.y - 4, BOUNDS.end.y))
+			1: pos = Vector3(BOUNDS.end.x + rng.randf_range(0.5, 4.0), 0, rng.randf_range(BOUNDS.position.y - 4, BOUNDS.end.y))
+			2: pos = Vector3(rng.randf_range(BOUNDS.position.x - 4, BOUNDS.end.x + 4), 0, BOUNDS.position.y - rng.randf_range(0.5, 4.0))
+			_: pos = Vector3(rng.randf_range(BOUNDS.position.x - 4, BOUNDS.end.x + 4), 0, BOUNDS.end.y + rng.randf_range(0.5, 4.0))
+		HD2D.add_pine(self, pos, rng.randf_range(4.0, 7.0), rng)
+	# Ridge walls behind the treeline and the Jade Canopy range beyond.
+	HD2D.add_prop(self, "cliff_1", Vector3(-6, 0, BOUNDS.position.y - 7), 0)
+	HD2D.add_prop(self, "cliff_0", Vector3(10, 0, BOUNDS.position.y - 8), 8)
+	HD2D.add_prop(self, "cliff_0", Vector3(BOUNDS.position.x - 7, 0, -12), -90)
+
+	HD2D.add_undergrowth(self, rng, BOUNDS, 420, func(p: Vector3) -> bool:
+		return absf(p.x) > 1.7 and p.length() > 5.0 and not _near_marker(p, 2.2) and p.distance_to(START_POSITION) > 1.5)
+	HD2D.add_ground_detail(self, rng, BOUNDS, 90, func(p: Vector3) -> bool:
+		return absf(p.x) > 1.6 and p.length() > 7.0)
+	var shafts: Array = []
+	for i in 6:
+		shafts.append(Vector3(rng.randf_range(-12, 12), 0, rng.randf_range(-22, 2)))
+	HD2D.add_light_shafts(self, rng, shafts, SUN_ANGLES)
 
 
 func _near_marker(pos: Vector3, radius: float) -> bool:
@@ -115,9 +154,10 @@ func _near_marker(pos: Vector3, radius: float) -> bool:
 
 
 func _build_player() -> void:
-	_player = HD2D.make_sprite_actor(PixelArt.texture(&"baihua"))
+	_player = SpriteSheets.make_actor(SpriteSheets.player_id())
 	_player_sprite = _player.get_node("Sprite")
 	_player.position = GameState.field_position if GameState.has_field_position else START_POSITION
+	_player.position.y = HD2D.crater_height(Vector2(_player.position.x, _player.position.z).length())
 	add_child(_player)
 
 	var ring_mesh := TorusMesh.new()
@@ -137,19 +177,18 @@ func _build_markers() -> void:
 		marker.position = ENCOUNTERS[id]
 		add_child(marker)
 		var enemy_ids: Array = enc.enemies
+		var right := HD2D.iso_right()
+		var up := HD2D.iso_up()
 		for i in mini(enemy_ids.size(), 3):
 			var data := Db.combatant(enemy_ids[i])
-			var actor := HD2D.make_sprite_actor(PixelArt.texture(data.sprite_id), data.sprite_scale)
-			actor.position = Vector3(i * 0.9 - 0.4 * mini(enemy_ids.size() - 1, 2), 0, i * 0.4)
+			var actor := SpriteSheets.make_actor(data.sprite_id)
+			actor.position = right * (i * 1.1 - 0.55 * mini(enemy_ids.size() - 1, 2)) + up * (i % 2) * 0.8
 			marker.add_child(actor)
-			var sprite: Sprite3D = actor.get_node("Sprite")
-			var bob := sprite.create_tween().set_loops()
-			bob.tween_property(sprite, "position:y", 0.08, 0.5 + i * 0.1).set_trans(Tween.TRANS_SINE)
-			bob.tween_property(sprite, "position:y", 0.0, 0.5 + i * 0.1).set_trans(Tween.TRANS_SINE)
+			SpriteSheets.set_dir(actor.get_node("Sprite"), [5, 6, 7][i % 3])
 		var danger := OmniLight3D.new()
 		danger.light_color = Color("ff4a3a")
-		danger.light_energy = 0.8
-		danger.omni_range = 3.0
+		danger.light_energy = 0.7
+		danger.omni_range = 3.5
 		danger.position = Vector3(0, 1.0, 0)
 		marker.add_child(danger)
 		_markers[id] = marker
@@ -159,6 +198,7 @@ func _build_markers() -> void:
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
+	layer.layer = 60
 	add_child(layer)
 	var root := Control.new()
 	root.theme = UITheme.get_theme()
@@ -183,7 +223,7 @@ func _build_hud() -> void:
 	root.add_child(_stones_label)
 
 	_menu_button = UITheme.button("Menu", _toggle_menu, 140)
-	_menu_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 20)
+	UITheme.pin_top_right(_menu_button, 140, 72)
 	root.add_child(_menu_button)
 
 	_menu_panel = PanelContainer.new()
@@ -193,10 +233,12 @@ func _build_hud() -> void:
 	box.add_theme_constant_override("separation", 12)
 	_menu_panel.add_child(box)
 	box.add_child(UITheme.button("Save", _on_save, 280))
-	var quality_button := UITheme.button(_quality_text(), Callable(), 280)
+	var quality_button := UITheme.button(_quality_text(), func() -> void: pass, 280)
 	quality_button.pressed.connect(func() -> void:
 		Settings.set_quality((Settings.quality + 1) % 3)
 		quality_button.text = _quality_text()
+		GameState.field_position = _player.position
+		GameState.has_field_position = true
 		SceneRouter.go_to(SceneRouter.FIELD))
 	box.add_child(quality_button)
 	box.add_child(UITheme.button("Title Screen", func() -> void:
@@ -275,6 +317,7 @@ func _set_move_target(screen_pos: Vector2) -> void:
 	if hit == null:
 		return
 	_move_target = _clamp_to_bounds(hit)
+	_move_target.y = 0.0
 	_target_ring.position = _move_target + Vector3(0, 0.05, 0)
 	_target_ring.visible = true
 
@@ -282,10 +325,11 @@ func _set_move_target(screen_pos: Vector2) -> void:
 func _physics_process(delta: float) -> void:
 	if _in_transition:
 		return
+	# Screen directions map onto the diagonal ground axes of the isometric view.
 	var input := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
 	if _joystick.touch_index >= 0:
 		input = _joystick.vector
-	var velocity := Vector3(input.x, 0, input.y)
+	var velocity := HD2D.iso_right() * input.x - HD2D.iso_up() * input.y
 	if input != Vector2.ZERO:
 		_move_target = null
 		_target_ring.visible = false
@@ -302,25 +346,25 @@ func _physics_process(delta: float) -> void:
 	var moving := velocity.length() > 0.05
 	if moving:
 		var next := _clamp_to_bounds(_player.position + velocity * delta)
-		_player.position = _push_out_of_obstacles(next)
-		if absf(velocity.x) > 0.1:
-			_player_sprite.flip_h = velocity.x < 0
-		_walk_time += delta * 10.0
-		_player_sprite.position.y = absf(sin(_walk_time)) * 0.07
-	else:
-		_walk_time = 0.0
-		_player_sprite.position.y = lerpf(_player_sprite.position.y, 0.0, 0.3)
+		next = _push_out_of_obstacles(next)
+		next.y = HD2D.crater_height(Vector2(next.x, next.z).length())
+		_player.position = next
+		SpriteSheets.set_dir(_player_sprite, SpriteSheets.dir_from_motion(velocity))
+		if not SpriteSheets.is_playing(_player_sprite, &"walk"):
+			SpriteSheets.play(_player_sprite, &"walk")
+	elif not SpriteSheets.is_playing(_player_sprite, &"idle"):
+		SpriteSheets.play(_player_sprite, &"idle")
 	_update_camera(delta * 5.0)
 	_check_encounters()
 
 
 func _clamp_to_bounds(p: Vector3) -> Vector3:
-	return Vector3(clampf(p.x, BOUNDS.position.x, BOUNDS.end.x), 0, clampf(p.z, BOUNDS.position.y, BOUNDS.end.y))
+	return Vector3(clampf(p.x, BOUNDS.position.x, BOUNDS.end.x), p.y, clampf(p.z, BOUNDS.position.y, BOUNDS.end.y))
 
 
 func _push_out_of_obstacles(p: Vector3) -> Vector3:
 	for o in _obstacles:
-		var centre := Vector3(o.x, 0, o.z)
+		var centre := Vector3(o.x, p.y, o.z)
 		var min_dist := o.y + 0.3
 		var d := p.distance_to(centre)
 		if d < min_dist and d > 0.0001:
@@ -329,9 +373,8 @@ func _push_out_of_obstacles(p: Vector3) -> Vector3:
 
 
 func _update_camera(weight: float) -> void:
-	var goal := _player.position + CAMERA_OFFSET
+	var goal := _player.position + Vector3(0, 0.8, 0) + HD2D.iso_offset()
 	_camera.position = _camera.position.lerp(goal, clampf(weight, 0.0, 1.0))
-	_camera.look_at(_camera.position - CAMERA_OFFSET + Vector3(0, 0.8, 0))
 
 
 func _check_encounters() -> void:
@@ -344,6 +387,7 @@ func _check_encounters() -> void:
 
 func _start_battle(id: StringName) -> void:
 	_in_transition = true
+	SpriteSheets.play(_player_sprite, &"idle")
 	# Return a step back toward the start so the player isn't on the marker.
 	var marker_pos: Vector3 = _markers[id].position
 	var back := (_player.position - marker_pos).normalized()

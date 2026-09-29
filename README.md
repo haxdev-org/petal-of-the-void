@@ -69,10 +69,12 @@ key needs the old app uninstalled first.
 - `autoload/`: global singletons: `Settings` (quality, input), `GameState` (flags, save/load), `SceneRouter` (fade transitions)
 - `battle/`: `BattleSystem` and `Combatant`: turn order, damage, technique copying. No scene code.
 - `data/`: `SkillData`, `CombatantData` and `Db` (all skills, monsters and encounters)
-- `core/`: `HD2D` (lighting, bloom, depth of field, fog, petals, props) and `PixelArt` (placeholder sprites)
+- `core/`: `HD2D` (isometric camera, lighting, textured ground, Blender props, crater, decals, effects), `SpriteSheets` (8-direction sprite loader) and `PixelArt` (tiny generated textures)
+- `tools/`: art generators: `blender_sprites.py` + `post_sprites.py` (characters rendered at 8 facings), `blender_props.py` (scenery models), `gen_textures.py` (tiles, normal maps, decals), `capture.gd` (screenshots)
 - `scenes/`: title, Chapter One intro, the field (Broken Tooth Ridge) and battle
 - `ui/`: theme, virtual joystick, full-screen illustration viewer
 - `assets/`: art copied from `art/` for use in the game
 
-Placeholder sprites are drawn from text grids in `core/pixel_art.gd`. When real
-sprite sheets arrive, only `PixelArt.texture()` needs to change.
+All art is generated from the scripts in `game/tools/` (see
+`docs/ART_DIRECTION.md`). Regenerating needs Python 3 with numpy and Pillow,
+and Blender 5.x on the PATH for the sprites and props.

@@ -1,0 +1,154 @@
+{
+ "frame_w": 112,
+ "frame_h": 80,
+ "dirs": 8,
+ "origin": "bottom_center",
+ "anims": {
+  "idle_0": {
+   "row": 0,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "idle_1": {
+   "row": 1,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "idle_2": {
+   "row": 2,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "idle_3": {
+   "row": 3,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "idle_4": {
+   "row": 4,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "idle_5": {
+   "row": 5,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "idle_6": {
+   "row": 6,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "idle_7": {
+   "row": 7,
+   "frames": 4,
+   "fps": 3,
+   "loop": true
+  },
+  "attack_0": {
+   "row": 8,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "attack_1": {
+   "row": 9,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "attack_2": {
+   "row": 10,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "attack_3": {
+   "row": 11,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "attack_4": {
+   "row": 12,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "attack_5": {
+   "row": 13,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "attack_6": {
+   "row": 14,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "attack_7": {
+   "row": 15,
+   "frames": 3,
+   "fps": 10,
+   "loop": false
+  },
+  "hurt_0": {
+   "row": 16,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  },
+  "hurt_1": {
+   "row": 17,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  },
+  "hurt_2": {
+   "row": 18,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  },
+  "hurt_3": {
+   "row": 19,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  },
+  "hurt_4": {
+   "row": 20,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  },
+  "hurt_5": {
+   "row": 21,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  },
+  "hurt_6": {
+   "row": 22,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  },
+  "hurt_7": {
+   "row": 23,
+   "frames": 1,
+   "fps": 1,
+   "loop": true
+  }
+ },
+ "ppm": 44.0,
+ "height_m": 1.3
+}

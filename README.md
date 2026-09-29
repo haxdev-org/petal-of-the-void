@@ -37,7 +37,15 @@ godot --path game res://tools/capture.tscn -- /path/to/output
 
 ## Putting it on a phone
 
-**Android:** the project includes an Android export preset (`game/export_presets.cfg`:
+**Android, the easy way:** every push that changes `game/` runs the *Android
+build* workflow, which publishes a signed APK as a GitHub Release. On your
+phone, open the repo's **Releases** page, tap the newest `.apk` and install it.
+You can also start a build by hand under *Actions → Android build → Run
+workflow*. The workflow needs three repository secrets
+(`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`);
+without them it skips the build and shows a warning.
+
+**Android, building locally:** the project includes an Android export preset (`game/export_presets.cfg`:
 arm64, release, no Gradle build). One-time setup: in Godot use *Editor → Manage
 Export Templates → Download*, install the Android SDK (platform-tools and
 build-tools), and set the SDK and Java paths under *Editor Settings → Export →

@@ -1,0 +1,116 @@
+name: Android build
+
+# Builds a signed release APK and publishes it as a GitHub Release so it can
+# be downloaded straight to a phone. Needs three repository secrets:
+#   ANDROID_KEYSTORE_BASE64   - the release keystore, base64-encoded
+#   ANDROID_KEYSTORE_PASSWORD - its password
+#   ANDROID_KEY_ALIAS         - the key alias inside it
+on:
+  push:
+    branches: [main, ccr-858d4579-sawolw]
+    paths: ["game/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.1
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check signing secrets
+        id: secrets
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "::warning::Signing secrets are not set, so no APK was built. See README.md > Putting it on a phone."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+
+      - uses: actions/setup-java@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Godot and export templates
+        if: steps.secrets.outputs.ready == 'true'
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-android
+
+      - name: Download Godot and Android templates
+        if: steps.secrets.outputs.ready == 'true' && steps.cache.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          mkdir -p ~/godot
+          curl -sSL -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip -d ~/godot && mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+          templates=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p "$templates"
+          curl -sSL -o templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q -o -j templates.tpz 'templates/android_*' 'templates/version.txt' -d "$templates"
+          rm godot.zip templates.tpz
+
+      - name: Configure Android SDK, keystore and version
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p ~/.config/godot
+          cat > ~/.config/godot/editor_settings-4.7.tres <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          # Each build gets a higher version code so it installs over the last one.
+          sed -i "s/^version\/code=.*/version\/code=${GITHUB_RUN_NUMBER}/; s/^version\/name=.*/version\/name=\"0.1.${GITHUB_RUN_NUMBER}\"/" game/export_presets.cfg
+
+      - name: Export APK
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ runner.temp }}/release.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        working-directory: game
+        run: |
+          mkdir -p ../build
+          timeout 300 ~/godot/godot --headless --import || true
+          ~/godot/godot --headless --export-release "Android" "../build/PetalOfTheVoid-0.1.${GITHUB_RUN_NUMBER}.apk"
+          test -s "../build/PetalOfTheVoid-0.1.${GITHUB_RUN_NUMBER}.apk"
+          rm -f "$RUNNER_TEMP/release.keystore"
+
+      - name: Publish release
+        if: steps.secrets.outputs.ready == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: Petal of the Void 0.1.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: build/*.apk
+          body: |
+            Built from `${{ github.ref_name }}` at ${{ github.sha }}.
+
+            **Install on Android:** open this page on your phone, tap the `.apk` below,
+            then open the download and allow installing from your browser when asked.

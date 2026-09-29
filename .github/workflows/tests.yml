@@ -1,0 +1,26 @@
+name: Game tests
+
+on:
+  push:
+    paths: ["game/**", ".github/workflows/tests.yml"]
+  pull_request:
+    paths: ["game/**", ".github/workflows/tests.yml"]
+
+jobs:
+  battle-tests:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.7.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
+      - name: Import project
+        working-directory: game
+        run: timeout 300 ../godot --headless --import
+      - name: Run tests
+        working-directory: game
+        run: ../godot --headless -s tests/run_tests.gd

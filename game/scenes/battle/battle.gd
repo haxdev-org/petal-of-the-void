@@ -387,7 +387,7 @@ func _show_main_commands(actor: Combatant) -> void:
 	_command_box.add_child(_skill_button(actor, by_id[&"strike"], "Strike"))
 	_command_box.add_child(_skill_button(actor, by_id[&"core_surge"], "Core Surge (%d)" % by_id[&"core_surge"].heat_cost))
 	if actor.skills.any(func(s: SkillData) -> bool: return s.is_qi_technique()):
-		_command_box.add_child(UITheme.button("Techniques", func() -> void: _show_techniques(actor), 190))
+		_command_box.add_child(UITheme.button("Techniques", func() -> void: _show_techniques(actor), 172))
 	else:
 		_command_box.add_child(_skill_button(actor, by_id[&"assess"], "Sensor Sweep"))
 	_command_box.add_child(_skill_button(actor, by_id[&"nanobot_repair"], "Repair (%d%%)" % by_id[&"nanobot_repair"].nano_cost))
@@ -410,12 +410,12 @@ func _show_techniques(actor: Combatant) -> void:
 			_command_box.add_child(_skill_button(actor, s, label))
 	if actor.knows(&"assess"):
 		_command_box.add_child(_skill_button(actor, actor.skills.filter(func(s: SkillData) -> bool: return s.id == &"assess")[0], "Sensor Sweep"))
-	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 190))
+	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 172))
 	_place_command_panel()
 
 
 func _skill_button(actor: Combatant, skill: SkillData, text: String) -> Button:
-	var b := UITheme.button(text, func() -> void: _on_skill_picked(actor, skill), 190)
+	var b := UITheme.button(text, func() -> void: _on_skill_picked(actor, skill), 172)
 	b.disabled = not actor.can_use(skill)
 	b.tooltip_text = skill.description
 	return b
@@ -428,7 +428,7 @@ func _on_skill_picked(actor: Combatant, skill: SkillData) -> void:
 		return
 	_targeting_skill = skill
 	_clear_commands()
-	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 190))
+	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 172))
 	_place_command_panel()
 	_hint_label.text = "Tap a target for %s" % skill.display_name
 	_hint_label.visible = true

@@ -101,8 +101,18 @@ def _finish(obj, parent, loc, scale, mat, rot=(0, 0, 0)):
     obj.scale = scale
     obj.rotation_euler = rot
     obj.data.materials.append(material(mat))
-    for p in obj.data.polygons:
-        p.use_smooth = True
+    if obj.type == "MESH":
+        for p in obj.data.polygons:
+            p.use_smooth = True
+    return obj
+
+
+def _soft(obj, levels=2):
+    """Subdivision surface: turns a box into a rounded blob, a cone into a
+    soft-capped tube."""
+    mod = obj.modifiers.new("subsurf", "SUBSURF")
+    mod.levels = levels
+    mod.render_levels = levels
     return obj
 
 
@@ -125,81 +135,149 @@ def box(name, parent, loc, scale, mat, rot=(0, 0, 0)):
     return _finish(bpy.context.active_object, parent, loc, scale, mat, rot)
 
 
+def blob(name, parent, loc, scale, mat, rot=(0, 0, 0)):
+    """Rounded box: the workhorse for heads, torsos, hands and feet."""
+    return _soft(box(name, parent, loc, scale, mat, rot))
+
+
+def tube(name, parent, loc, r_top, r_bottom, length, mat, rot=(0, 0, 0)):
+    """Tapered limb segment hanging down local -Z from `loc`, soft-capped."""
+    obj = cyl(name, parent, (loc[0], loc[1], loc[2] - length / 2.0), r_bottom, length, mat, r2=r_top, rot=rot)
+    return _soft(obj, 1)
+
+
+def mball(family, parent, loc, scale, mat, rot=(0, 0, 0)):
+    """One blended lump of an organic body. Every object whose name starts
+    with `family` fuses into one smooth surface, so a torso, neck and legs
+    made this way flow into each other. The first object of a family owns
+    the material and resolution."""
+    basis = bpy.data.objects.get(family)
+    mb = bpy.data.metaballs.new(family)
+    if basis is None:
+        mb.resolution = 0.12
+        mb.render_resolution = 0.025
+        # At threshold t and stiffness s a ball of radius r shows a surface at
+        # r * sqrt(1 - sqrt(t / s)); these values put it at ~r and leave a
+        # generous field so neighbouring lumps fuse.
+        mb.threshold = 0.25
+    el = mb.elements.new()
+    el.type = "BALL"
+    el.radius = 1.18
+    el.stiffness = 2.0
+    obj = bpy.data.objects.new(family, mb)
+    bpy.context.scene.collection.objects.link(obj)
+    obj.parent = parent
+    obj.location = loc
+    obj.scale = scale
+    obj.rotation_euler = rot
+    if basis is None:
+        mb.materials.append(material(mat))
+    return obj
+
+
 # --- Baihua -----------------------------------------------------------------------------
 
 class Baihua:
-    """Faces +X. Joints are empties; limbs hang along -Z from them."""
+    """Faces +X. Joints are empties; limbs hang along -Z from them.
+
+    Proportions: 1.64 m, slight build. Chassis version shows the white
+    ceramic plating as separate panels with dark seams and joints; robe
+    version wraps the same body in the ink-blue silk."""
 
     def __init__(self, robe: bool):
         self.robe = robe
-        r = self.root = empty("root")
-        self.pelvis = empty("pelvis", r, (0, 0, 0.95))
-        self.torso = empty("torso", self.pelvis, (0, 0, 0.05))
         armor = not robe
-        # pelvis / hips
-        box("hips", self.pelvis, (0, 0, 0), (0.20, 0.26, 0.14), "armor" if armor else "robe")
-        # torso: tapered, wider than deep
-        t = cyl("chest", self.torso, (0, 0, 0.22), 0.11, 0.44, "armor" if armor else "robe", r2=0.15)
-        t.scale = (1.0, 1.3, 1.0)
+        plate = "armor" if armor else "robe"
+        r = self.root = empty("root")
+        self.pelvis = empty("pelvis", r, (0, 0, 0.96))
+        self.torso = empty("torso", self.pelvis, (0, 0, 0.04))
+        # Body core: hips, waist, ribcage as rounded masses.
+        blob("hips", self.pelvis, (0, 0, -0.03), (0.20, 0.29, 0.15), plate)
+        blob("waist", self.torso, (0, 0, 0.10), (0.16, 0.21, 0.18), plate)
+        blob("chest", self.torso, (0, 0, 0.30), (0.21, 0.32, 0.28), plate)
         if armor:
-            box("chest_plate", self.torso, (0.09, 0, 0.26), (0.06, 0.24, 0.20), "armor")
-            box("belt", self.torso, (0, 0, 0.03), (0.26, 0.32, 0.03), "armor_dark")
+            # Front plating: two pectoral panels, three abdominal segments
+            # with dark seams, a belt and a backplate.
+            for y in (-0.08, 0.08):
+                blob("pec", self.torso, (0.10, y, 0.33), (0.06, 0.14, 0.15), "armor")
+            for k in range(3):
+                z = 0.19 - k * 0.055
+                blob("ab", self.torso, (0.085, 0, z), (0.05, 0.21 - k * 0.02, 0.045), "armor")
+                box("seam", self.torso, (0.09, 0, z + 0.03), (0.05, 0.20, 0.006), "armor_dark")
+            box("belt", self.torso, (0, 0, 0.015), (0.23, 0.32, 0.035), "armor_dark")
+            blob("back", self.torso, (-0.10, 0, 0.30), (0.05, 0.28, 0.26), "armor")
+            box("spine_seam", self.torso, (-0.125, 0, 0.30), (0.005, 0.012, 0.26), "armor_dark")
         else:
-            # collar
-            cyl("collar", self.torso, (0, 0, 0.42), 0.075, 0.06, "grey")
-            # sash and its trailing end on the left hip
-            cyl("sash", self.torso, (0, 0, 0.06), 0.155, 0.07, "white")
-            box("sash_tail", self.pelvis, (-0.02, -0.15, -0.12), (0.03, 0.05, 0.26), "white")
-        # head
+            cyl("collar", self.torso, (0, 0, 0.43), 0.08, 0.06, "grey")
+            cyl("sash", self.torso, (0, 0, 0.05), 0.165, 0.07, "white")
+            blob("sash_knot", self.pelvis, (0.02, -0.15, 0.06), (0.06, 0.07, 0.06), "white")
+            box("sash_tail", self.pelvis, (-0.02, -0.16, -0.14), (0.03, 0.05, 0.30), "white", rot=(0.12, 0, 0))
+        # Neck and head.
         self.neck = empty("neck", self.torso, (0, 0, 0.45))
-        cyl("neck_c", self.neck, (0, 0, 0.03), 0.04, 0.07, "skin" if robe else "armor_dark")
-        head = empty("head", self.neck, (0, 0, 0.06))
-        sphere("face", head, (0, 0, 0.11), (0.105, 0.11, 0.12), "skin")
-        sphere("hair_cap", head, (-0.025, 0, 0.14), (0.115, 0.125, 0.115), "hair")
-        # fringe sweeps across the brow, eyes below it
-        box("fringe", head, (0.07, 0.0, 0.18), (0.09, 0.19, 0.05), "hair", rot=(0, math.radians(-15), 0))
-        for y in (-0.04, 0.04):
-            sphere("eye", head, (0.10, y, 0.11), (0.012, 0.016, 0.02), "eye")
-        # long hair down the back
-        self.hair = empty("hair", head, (-0.09, 0, 0.10))
-        box("hair_back", self.hair, (-0.02, 0, -0.20), (0.05, 0.14, 0.42), "hair")
-        box("hair_tip", self.hair, (-0.03, 0, -0.44), (0.04, 0.10, 0.10), "hair")
-        # arms
+        cyl("neck_c", self.neck, (0, 0, 0.04), 0.042, 0.09, "skin" if robe else "armor_dark")
+        head = empty("head", self.neck, (0, 0, 0.07))
+        blob("skull", head, (0, 0, 0.13), (0.19, 0.19, 0.22), "skin")
+        blob("jaw", head, (0.015, 0, 0.055), (0.17, 0.16, 0.12), "skin")
+        blob("nose", head, (0.10, 0, 0.10), (0.03, 0.025, 0.03), "skin")
+        for y in (-0.045, 0.045):
+            box("eye", head, (0.093, y, 0.115), (0.015, 0.03, 0.022), "eye")
+            box("brow", head, (0.095, y, 0.145), (0.012, 0.035, 0.007), "hair")
+        # Hair: cap over the crown, a fringe swept across the brow, side
+        # locks in front of the ears and the long fall down the back.
+        blob("hair_cap", head, (-0.03, 0, 0.17), (0.21, 0.22, 0.19), "hair")
+        box("fringe", head, (0.07, 0.0, 0.19), (0.09, 0.19, 0.05), "hair", rot=(0, math.radians(-15), 0))
+        for y in (-0.105, 0.105):
+            blob("lock", head, (0.05, y, 0.04), (0.05, 0.045, 0.20), "hair")
+        self.hair = empty("hair", head, (-0.09, 0, 0.12))
+        blob("hair_upper", self.hair, (-0.02, 0, -0.12), (0.07, 0.19, 0.30), "hair")
+        self.hair2 = empty("hair2", self.hair, (-0.01, 0, -0.26))
+        blob("hair_lower", self.hair2, (-0.01, 0, -0.14), (0.06, 0.16, 0.30), "hair")
+        for y in (-0.05, 0.05):
+            blob("hair_tip", self.hair2, (-0.02, y, -0.31), (0.05, 0.06, 0.10), "hair")
+        # Arms.
         self.arm = {}
-        for side, y in (("L", 0.19), ("R", -0.19)):
-            sh = empty(f"shoulder{side}", self.torso, (0, y, 0.40))
+        for side, y in (("L", 0.21), ("R", -0.21)):
+            sh = empty(f"shoulder{side}", self.torso, (0, y, 0.41))
             if armor:
-                sphere("pauldron", sh, (0, y * 0.15, 0.01), (0.07, 0.07, 0.06), "armor")
-                cyl("upper", sh, (0, 0, -0.14), 0.045, 0.28, "armor")
+                blob("pauldron", sh, (0, y * 0.12, 0.02), (0.11, 0.10, 0.09), "armor")
+                tube("upper", sh, (0, 0, 0.0), 0.062, 0.07, 0.29, "armor")
             else:
-                cyl("sleeve", sh, (0, 0, -0.15), 0.075, 0.30, "robe", r2=0.06)
+                tube("sleeve", sh, (0, 0, 0.0), 0.10, 0.085, 0.30, "robe")
             el = empty(f"elbow{side}", sh, (0, 0, -0.28))
             if armor:
-                sphere("elbow_j", el, (0, 0, 0), (0.045, 0.045, 0.045), "armor_dark")
-                cyl("fore", el, (0, 0, -0.13), 0.04, 0.26, "armor")
-                sphere("hand", el, (0, 0, -0.29), (0.04, 0.05, 0.06), "armor_dark")
+                sphere("elbow_j", el, (0, 0, 0), (0.05, 0.05, 0.05), "armor_dark")
+                tube("fore", el, (0, 0, 0.0), 0.04, 0.052, 0.26, "armor")
+                cyl("wrist", el, (0, 0, -0.26), 0.036, 0.025, "armor_dark")
+                blob("hand", el, (0.01, 0, -0.31), (0.05, 0.045, 0.08), "armor")
+                blob("thumb", el, (0.035, y * 0.12, -0.29), (0.02, 0.02, 0.04), "armor")
             else:
-                cyl("sleeve2", el, (0, 0, -0.12), 0.11, 0.24, "robe", r2=0.07)
-                cyl("glove", el, (0, 0, -0.26), 0.04, 0.10, "white")
-                sphere("hand", el, (0, 0, -0.32), (0.04, 0.045, 0.05), "white")
+                tube("sleeve2", el, (0, 0, 0.0), 0.12, 0.085, 0.25, "robe")
+                cyl("glove", el, (0, 0, -0.27), 0.04, 0.10, "white")
+                blob("hand", el, (0.01, 0, -0.33), (0.045, 0.045, 0.07), "white")
             self.arm[side] = (sh, el)
-        # legs / skirt
+        # Legs (under the robe only the boots show).
         self.leg = {}
         if robe:
-            skirt = cyl("skirt", self.pelvis, (0, 0, -0.48), 0.30, 0.92, "robe", r2=0.16)
+            skirt = cyl("skirt", self.pelvis, (0, 0, -0.48), 0.31, 0.92, "robe", r2=0.17)
             skirt.scale = (1.0, 1.1, 1.0)
-            cyl("underskirt", self.pelvis, (0, 0, -0.93), 0.29, 0.05, "grey")
-        for side, y in (("L", 0.085), ("R", -0.085)):
-            hip = empty(f"hip{side}", self.pelvis, (0, y, -0.04))
+            for k in range(6):
+                a = k / 6.0 * math.tau + 0.3
+                box("fold", self.pelvis, (math.cos(a) * 0.26, math.sin(a) * 0.29, -0.62), (0.03, 0.03, 0.62), "robe",
+                    rot=(math.sin(a) * 0.16, -math.cos(a) * 0.16, 0))
+            cyl("underskirt", self.pelvis, (0, 0, -0.93), 0.30, 0.05, "grey")
+        for side, y in (("L", 0.09), ("R", -0.09)):
+            hip = empty(f"hip{side}", self.pelvis, (0, y, -0.06))
             if armor:
-                cyl("thigh", hip, (0, 0, -0.21), 0.072, 0.42, "armor", r2=0.058)
+                tube("thigh", hip, (0, 0, 0.02), 0.06, 0.082, 0.42, "armor")
             kn = empty(f"knee{side}", hip, (0, 0, -0.42))
             if armor:
-                sphere("knee_j", kn, (0, 0, 0), (0.055, 0.055, 0.05), "armor_dark")
-                cyl("shin", kn, (0, 0, -0.20), 0.05, 0.40, "armor", r2=0.04)
-                box("foot", kn, (0.05, 0, -0.42), (0.16, 0.08, 0.06), "armor")
+                sphere("knee_j", kn, (0, 0, 0), (0.058, 0.058, 0.052), "armor_dark")
+                tube("shin", kn, (0, 0, 0.0), 0.042, 0.056, 0.40, "armor")
+                cyl("ankle", kn, (0, 0, -0.40), 0.04, 0.03, "armor_dark")
+                blob("foot", kn, (0.05, 0, -0.44), (0.20, 0.09, 0.07), "armor")
+                blob("toe", kn, (0.14, 0, -0.455), (0.06, 0.08, 0.05), "armor_dark")
             else:
-                box("boot", kn, (0.04, 0, -0.44), (0.15, 0.09, 0.08), "boot")
+                blob("boot", kn, (0.04, 0, -0.44), (0.16, 0.09, 0.08), "boot")
             self.leg[side] = (hip, kn)
         self.rest()
 
@@ -215,14 +293,15 @@ class Baihua:
     def rest(self):
         self.root.location = (0, 0, 0)
         self.root.rotation_euler = (0, 0, 0)
-        self.pelvis.location = (0, 0, 0.95)
+        self.pelvis.location = (0, 0, 0.96)
         self.pelvis.rotation_euler = (0, 0, 0)
         self.torso.rotation_euler = (0, 0, 0)
         self.neck.rotation_euler = (0, 0, 0)
         self.hair.rotation_euler = (0, 0, 0)
+        self.hair2.rotation_euler = (0, 0.08, 0)
         for side in "LR":
             sh, el = self.arm[side]
-            self.swing(sh, 0.05, 0.08 if side == "L" else -0.08)
+            self.swing(sh, 0.05, 0.10 if side == "L" else -0.10)
             self.swing(el, 0.25)
             hip, kn = self.leg[side]
             self.swing(hip, 0.0)
@@ -233,21 +312,23 @@ class Baihua:
         t = i / n
         w = math.tau * t
         if anim == "idle":
-            self.pelvis.location = (0, 0, 0.95 + 0.012 * math.sin(w))
-            self.hair.rotation_euler = (0, 0.06 * math.sin(w), 0)
+            self.pelvis.location = (0, 0, 0.96 + 0.012 * math.sin(w))
+            self.hair.rotation_euler = (0, 0.05 * math.sin(w), 0)
+            self.hair2.rotation_euler = (0, 0.08 + 0.06 * math.sin(w + 0.8), 0)
         elif anim == "walk":
             s = math.sin(w)
-            self.pelvis.location = (0, 0, 0.95 + 0.025 * abs(math.sin(w * 2)))
+            self.pelvis.location = (0, 0, 0.96 + 0.025 * abs(math.sin(w * 2)))
             self.torso.rotation_euler = (0, -0.06, 0)
             self.leg_swing(self.leg["L"][0], 0.38 * s)
             self.leg_swing(self.leg["R"][0], -0.38 * s)
             self.leg_swing(self.leg["L"][1], -0.7 * max(0.0, -math.sin(w - 0.6)))
             self.leg_swing(self.leg["R"][1], -0.7 * max(0.0, math.sin(w - 0.6)))
-            self.swing(self.arm["L"][0], -0.3 * s, 0.08)
-            self.swing(self.arm["R"][0], 0.3 * s, -0.08)
+            self.swing(self.arm["L"][0], -0.3 * s, 0.10)
+            self.swing(self.arm["R"][0], 0.3 * s, -0.10)
             self.swing(self.arm["L"][1], 0.35)
             self.swing(self.arm["R"][1], 0.35)
             self.hair.rotation_euler = (0, 0.15 + 0.08 * s, 0)
+            self.hair2.rotation_euler = (0, 0.2 + 0.1 * math.sin(w - 0.9), 0)
         elif anim == "attack":
             phase = [0.0, 1.0, 0.8, 0.3][i]
             if i == 0:  # windup
@@ -266,12 +347,13 @@ class Baihua:
                 self.leg_swing(self.leg["L"][0], -0.35 * phase)
                 self.leg_swing(self.leg["L"][1], -0.5 * phase)
                 self.hair.rotation_euler = (0, 0.5 * phase, 0)
+                self.hair2.rotation_euler = (0, 0.5 * phase, 0)
         elif anim == "cast":
             lift = [0.5, 1.1, 1.45][i]
             for side in "LR":
                 self.swing(self.arm[side][0], lift, 0.35 if side == "L" else -0.35)
                 self.swing(self.arm[side][1], 0.5 - 0.2 * i)
-            self.pelvis.location = (0, 0, 0.95 + 0.01 * i)
+            self.pelvis.location = (0, 0, 0.96 + 0.01 * i)
             self.hair.rotation_euler = (0, 0.1 * i, 0)
         elif anim == "hurt":
             self.root.location = (-0.08, 0, 0)
@@ -282,47 +364,53 @@ class Baihua:
             self.swing(self.arm["L"][0], 0.4, 0.6)
             self.leg_swing(self.leg["L"][0], -0.3)
             self.hair.rotation_euler = (0, -0.3, 0)
+            self.hair2.rotation_euler = (0, -0.4, 0)
 
 
 # --- Monsters -----------------------------------------------------------------------
 
 class Wolf:
-    """Acid-fang wolf: shoulders too high, flattened skull, amber eyes. Faces +X."""
+    """Acid-fang wolf: shoulders too high, flattened skull, uniform amber
+    eyes. 1.3 m at the shoulder, faces +X. The body is one blended
+    metaball surface; dark parts (muzzle, ears, paws) are meshes."""
 
     def __init__(self):
         r = self.root = empty("root")
-        self.body = empty("body", r, (0, 0, 0.84))
-        b = sphere("barrel", self.body, (-0.02, 0, 0.02), (0.66, 0.22, 0.25), "fur")
-        sphere("belly", self.body, (-0.05, 0, -0.06), (0.50, 0.19, 0.15), "fur_light")
-        sphere("hump", self.body, (0.30, 0, 0.12), (0.24, 0.23, 0.21), "fur")
-        sphere("haunch", self.body, (-0.44, 0, 0.0), (0.20, 0.21, 0.22), "fur")
-        self.neck = empty("neck", self.body, (0.48, 0, 0.16))
-        cyl("neck_c", self.neck, (0.12, 0, 0.02), 0.11, 0.30, "fur", rot=(0, math.radians(80), 0))
-        self.head = empty("head", self.neck, (0.28, 0, 0.04))
-        box("skull", self.head, (0.06, 0, 0.0), (0.26, 0.15, 0.10), "fur")
-        box("snout", self.head, (0.27, 0, -0.03), (0.22, 0.09, 0.07), "fur_dark")
-        self.jaw = empty("jaw", self.head, (0.14, 0, -0.06))
-        box("jaw_c", self.jaw, (0.10, 0, -0.02), (0.20, 0.08, 0.04), "fur_dark")
-        for y in (-0.075, 0.075):
-            box("ear", self.head, (-0.08, y, 0.09), (0.06, 0.03, 0.10), "fur_dark", rot=(0, math.radians(30), 0))
-            sphere("eye", self.head, (0.13, y * 0.85, 0.035), (0.02, 0.022, 0.018), "amber")
-        for y in (-0.03, 0.03):
-            box("fang", self.jaw, (0.16, y, 0.0), (0.02, 0.012, 0.035), "white")
-        self.tail = empty("tail", self.body, (-0.56, 0, 0.06))
-        cyl("tail_c", self.tail, (-0.16, 0, 0.06), 0.035, 0.36, "fur", r2=0.015, rot=(0, math.radians(-70), 0))
+        self.body = empty("body", r, (0, 0, 0.86))
+        F = "WolfFur"
+        mball(F, self.body, (0.30, 0, 0.02), (0.30, 0.20, 0.26), "fur")       # chest
+        mball(F, self.body, (-0.02, 0, -0.02), (0.36, 0.18, 0.20), "fur")     # ribs
+        mball(F, self.body, (-0.44, 0, -0.02), (0.22, 0.19, 0.23), "fur")     # haunches
+        mball(F, self.body, (0.38, 0, 0.16), (0.17, 0.17, 0.14), "fur")       # the hump over the shoulders
+        mball("WolfBelly", self.body, (-0.05, 0, -0.12), (0.38, 0.16, 0.13), "fur_light")
+        self.neck = empty("neck", self.body, (0.52, 0, 0.14))
+        mball(F, self.neck, (0.13, 0, 0.03), (0.19, 0.11, 0.12), "fur")
+        self.head = empty("head", self.neck, (0.30, 0, 0.03))
+        mball(F, self.head, (0.04, 0, 0.0), (0.17, 0.12, 0.10), "fur")        # flattened skull
+        mball(F, self.head, (0.20, 0, -0.03), (0.15, 0.07, 0.06), "fur")      # muzzle
+        blob("nose", self.head, (0.35, 0, -0.02), (0.05, 0.05, 0.045), "fur_dark")
+        self.jaw = empty("jaw", self.head, (0.14, 0, -0.07))
+        blob("jaw_c", self.jaw, (0.11, 0, -0.02), (0.22, 0.08, 0.045), "fur_dark")
+        for y in (-0.08, 0.08):
+            blob("ear", self.head, (-0.06, y, 0.10), (0.06, 0.03, 0.11), "fur_dark", rot=(0, math.radians(30), y * 3))
+            sphere("eye", self.head, (0.14, y * 0.8, 0.035), (0.02, 0.022, 0.018), "amber")
+        for y in (-0.035, 0.035):
+            box("fang", self.jaw, (0.19, y, 0.005), (0.02, 0.012, 0.035), "white")
+        self.tail = empty("tail", self.body, (-0.60, 0, 0.06))
+        tube("tail_c", self.tail, (0, 0, 0), 0.015, 0.04, 0.38, "fur", rot=(0, math.radians(-115), 0))
         self.legs = {}
-        for name, x, y in (("FL", 0.32, 0.13), ("FR", 0.32, -0.13), ("BL", -0.36, 0.13), ("BR", -0.36, -0.13)):
+        for name, x, y in (("FL", 0.34, 0.13), ("FR", 0.34, -0.13), ("BL", -0.38, 0.13), ("BR", -0.38, -0.13)):
             hip = empty(f"hip{name}", self.body, (x, y, -0.06))
-            cyl("thigh", hip, (0, 0, -0.18), 0.07, 0.36, "fur", r2=0.05)
+            mball(F, hip, (0, 0, -0.15), (0.12, 0.10, 0.23), "fur")
             kn = empty(f"knee{name}", hip, (0, 0, -0.36))
-            cyl("shin", kn, (0, 0, -0.19), 0.045, 0.38, "fur_dark", r2=0.04)
-            box("paw", kn, (0.04, 0, -0.39), (0.13, 0.09, 0.06), "fur_dark")
+            mball(F, kn, (0, 0, -0.17), (0.085, 0.08, 0.21), "fur")
+            blob("paw", kn, (0.04, 0, -0.40), (0.14, 0.09, 0.06), "fur_dark")
             self.legs[name] = (hip, kn)
         self.rest()
 
     def rest(self):
         self.root.location = (0, 0, 0)
-        self.body.location = (0, 0, 0.84)
+        self.body.location = (0, 0, 0.86)
         self.body.rotation_euler = (0, 0, 0)
         self.body.scale = (1, 1, 1)
         self.neck.rotation_euler = (0, 0, 0)
@@ -344,7 +432,7 @@ class Wolf:
                 self.jaw.rotation_euler = (0, 0.25, 0)
         elif anim == "attack":
             if i == 0:  # crouch
-                self.body.location = (-0.15, 0, 0.70)
+                self.body.location = (-0.15, 0, 0.72)
                 self.body.rotation_euler = (0, -0.12, 0)
                 for name, (hip, kn) in self.legs.items():
                     hip.rotation_euler = (0, -0.5 if name[0] == "B" else 0.4, 0)
@@ -352,7 +440,7 @@ class Wolf:
             else:  # lunge
                 s = 1.0 if i == 1 else 0.6
                 self.root.location = (0.45 * s, 0, 0)
-                self.body.location = (0, 0, 0.9)
+                self.body.location = (0, 0, 0.92)
                 self.body.rotation_euler = (0, 0.2 * s, 0)
                 self.jaw.rotation_euler = (0, 0.55 * s, 0)
                 self.neck.rotation_euler = (0, -0.25 * s, 0)
@@ -369,35 +457,40 @@ class Wolf:
 
 
 class Bear:
-    """Quill-bear: twice a natural bear, quills along the spine, red eyes."""
+    """Quill-bear: twice a natural bear, heavy brow, quills along the spine,
+    red eyes. One blended body; dark muzzle, ears and paws."""
 
     def __init__(self):
         r = self.root = empty("root")
         self.body = empty("body", r, (0, 0, 1.15))
-        sphere("barrel", self.body, (0, 0, 0), (0.95, 0.52, 0.58), "bear")
-        sphere("shoulders", self.body, (0.45, 0, 0.18), (0.55, 0.52, 0.52), "bear")
-        sphere("rump", self.body, (-0.6, 0, 0.05), (0.45, 0.48, 0.48), "bear_dark")
+        F = "BearFur"
+        mball(F, self.body, (0, 0, 0), (0.85, 0.50, 0.55), "bear")            # barrel
+        mball(F, self.body, (0.50, 0, 0.16), (0.50, 0.50, 0.50), "bear")      # shoulders
+        mball(F, self.body, (-0.62, 0, 0.02), (0.42, 0.46, 0.46), "bear")     # rump
         self.head = empty("head", self.body, (1.05, 0, 0.12))
-        sphere("skull", self.head, (0.1, 0, 0), (0.30, 0.27, 0.26), "bear")
-        sphere("snout", self.head, (0.36, 0, -0.06), (0.16, 0.13, 0.12), "bear_dark")
-        sphere("nose", self.head, (0.50, 0, -0.03), (0.04, 0.05, 0.04), "eye")
-        for y in (-0.16, 0.16):
-            sphere("ear", self.head, (-0.05, y, 0.22), (0.07, 0.05, 0.07), "bear_dark")
-            sphere("eye", self.head, (0.30, y * 0.6, 0.08), (0.03, 0.035, 0.03), "red")
+        mball(F, self.head, (0.06, 0, 0.0), (0.30, 0.28, 0.27), "bear")       # skull
+        mball(F, self.head, (0.24, 0, 0.10), (0.20, 0.24, 0.12), "bear")      # brow
+        blob("snout", self.head, (0.40, 0, -0.06), (0.30, 0.24, 0.22), "bear_dark")
+        blob("nose", self.head, (0.55, 0, -0.02), (0.07, 0.09, 0.06), "eye")
+        for y in (-0.17, 0.17):
+            blob("ear", self.head, (-0.04, y, 0.24), (0.11, 0.08, 0.11), "bear_dark")
+            sphere("eye", self.head, (0.31, y * 0.6, 0.075), (0.03, 0.035, 0.03), "red")
         import random
         rng = random.Random(3)
-        for k in range(12):
-            x = -0.85 + k * 0.16
-            h = rng.uniform(0.35, 0.6)
-            cyl("quill", self.body, (x, rng.uniform(-0.06, 0.06), 0.45 + h / 2 - abs(x) * 0.12), 0.045, h, "quill", r2=0.005,
+        for k in range(13):
+            x = -0.90 + k * 0.15
+            h = rng.uniform(0.35, 0.62)
+            cyl("quill", self.body, (x, rng.uniform(-0.07, 0.07), 0.46 + h / 2 - abs(x) * 0.12), 0.045, h, "quill", r2=0.005,
                 rot=(0, math.radians(rng.uniform(-25, 10)), 0))
         self.legs = {}
-        for name, x, y in (("FL", 0.55, 0.30), ("FR", 0.55, -0.30), ("BL", -0.60, 0.30), ("BR", -0.60, -0.30)):
-            hip = empty(f"hip{name}", self.body, (x, y, -0.25))
-            cyl("thigh", hip, (0, 0, -0.30), 0.15, 0.60, "bear", r2=0.12)
+        for name, x, y in (("FL", 0.58, 0.30), ("FR", 0.58, -0.30), ("BL", -0.62, 0.30), ("BR", -0.62, -0.30)):
+            hip = empty(f"hip{name}", self.body, (x, y, -0.22))
+            mball(F, hip, (0, 0, -0.28), (0.20, 0.17, 0.34), "bear")
             kn = empty(f"knee{name}", hip, (0, 0, -0.55))
-            cyl("shin", kn, (0, 0, -0.18), 0.12, 0.36, "bear_dark", r2=0.11)
-            box("paw", kn, (0.08, 0, -0.36), (0.30, 0.22, 0.10), "bear_dark")
+            mball(F, kn, (0, 0, -0.16), (0.15, 0.14, 0.22), "bear")
+            blob("paw", kn, (0.09, 0, -0.37), (0.32, 0.24, 0.10), "bear_dark")
+            for c in range(3):
+                box("claw", kn, (0.26, -0.07 + c * 0.07, -0.40), (0.06, 0.02, 0.025), "white")
             self.legs[name] = (hip, kn)
         self.rest()
 

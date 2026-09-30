@@ -54,11 +54,15 @@ dozens of frames by hand.
 
 Pipeline (all in `game/tools/`):
 
-1. `blender_sprites.py` builds the characters from primitives inside
-   Blender (Baihua in the cracked chassis and in the robe, the acid-fang
-   wolf, the quill-bear), poses each animation frame, and renders every
-   frame at 8 facings, twice: lit (Cycles, one sun from the camera's upper
-   left plus soft ambient) and as flat material IDs.
+1. `blender_sprites.py` builds the characters inside Blender (Baihua in
+   the cracked chassis and in the robe, the acid-fang wolf, the quill-bear),
+   poses each animation frame, and renders every frame at 8 facings, twice:
+   lit (Cycles, one sun from the camera's upper left plus soft ambient) and
+   as flat material IDs. Humanoids are assembled from rounded blobs
+   (subdivision-smoothed boxes) and tapered tubes hung off joint empties;
+   the animals' bodies are metaball families (`mball()`), so chest, neck,
+   haunches and legs fuse into one organic surface, with dark muzzles, ears
+   and paws as meshes on top.
 2. `post_sprites.py` downsamples the 2x renders, looks up each pixel's
    material, quantises its brightness onto that material's 5-tone
    hue-shifted ramp, adds the selective outline and writes the sheets plus
@@ -78,7 +82,11 @@ python3 tools/post_sprites.py /tmp/renders
 ```
 
 To improve a character, edit its model or poses in `blender_sprites.py`;
-to change its colours, edit `MATERIALS` in both scripts.
+to change its colours, edit `MATERIALS` in both scripts. Pass `smoke` on
+the command line to render only two facings of the first frames for a
+quick look. When a real modelled character arrives (a `.glb` from an
+image-to-3D tool or an artist), the same render and quantise steps apply:
+import it in place of the procedural builder and keep the material names.
 
 ## Environment art
 

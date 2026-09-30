@@ -100,6 +100,10 @@ def load_pair(lit_path, id_path, ids):
     flat = blocks.transpose(0, 2, 1, 3, 4).reshape(h, w, SUPER * SUPER, 4)
     first = np.argmax(flat[..., 3] > 128, axis=2)
     id_px = np.take_along_axis(flat, first[..., None, None], axis=2)[:, :, 0, :3]
+    # The renderer's view transform sRGB-encodes the flat ID emission
+    # (128 comes out as 188); undo it so IDs match exactly.
+    c = id_px / 255.0
+    id_px = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4) * 255.0
     d = ((id_px.reshape(-1, 3)[:, None, :] - ids[None, :, :].astype(np.float32)) ** 2).sum(axis=2)
     mat = d.argmin(axis=1).reshape(h, w)
     # An edge sample whose ID colour is blended (far from every ID) takes the

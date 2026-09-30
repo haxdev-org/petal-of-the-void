@@ -21,17 +21,33 @@ Turn order uses **charge time (CT)**. Each combatant fills CT at its speed and
 acts at 100, so faster units act more often. The next five turns are shown
 on screen.
 
-Baihua's mechanics come straight from the story bible:
+Baihua's kit follows the novel's timeline. She has **no concept of qi until
+she cultivates** (Chapter Fourteen), so the early game is fought with what
+she crash-landed with: the chassis, the fusion core, the nanobot colony and
+her sensors. Story flags unlock the rest (`Db.player_data()`).
 
-| Mechanic | Source in novel | In game |
+**From the crash (Chapter One):**
+
+| Command | Source in novel | In game |
 |---|---|---|
-| **Chassis strikes** | Fusion-core-powered physical superiority | *Precise Strike*: free, builds heat |
-| **Qi techniques** | Ch14 chassis meridians, Ch17 Flame Path copies | *Compression Palm*, *Thousand-Year Ember*: cost qi |
-| **Combat qi regeneration** | Ch17: core refills dantian at expenditure rate | +8 qi at the start of every turn |
-| **Stellar Core heat** | Ch3/Ch10 regulator override, amber-gold glow, steam | Heat gauge (0–100) fills from actions and hits; at 100, *Stellar Discharge* hits all enemies |
-| **Technique copying** | Ch17: maps any technique on one observation, auto-optimises | When an enemy uses a copyable technique, Baihua learns a stronger, cheaper version for the rest of the battle |
-| **Nanobot repair** | Ch4/10/18 nanobot configurations | Heal 30% integrity for qi |
-| **Stillness** | Her uncanny stillness; the fake "Stilled Surface Form" | Guard: halve damage, restore qi |
+| **Precise Strike** | Chassis speed and precision | Free; builds core heat |
+| **Core Surge** | She draws surges from the fusion core into her limbs | Heavy strike; spends 40 heat |
+| **Sensor Sweep** | Her constant analysis of every opponent | Maps a target: her hits on it land 35% harder for 3 turns |
+| **Nanobot Repair** | The maintenance colony (Ch 4/10/18 configurations) | Restores 30% integrity; costs 25% colony mass, which regrows 4%/turn |
+| **Stillness** | Her uncanny stillness | Halves incoming damage |
+| **Stellar Discharge** | Ch 3 / Ch 10 regulator override | At 100 heat, raw fusion output hits every enemy |
+
+Resources on screen: **Integrity** (HP), **Core heat** (fills from her
+actions and from being hit), **Nanobots** (colony mass).
+
+**After the artificial path (`cultivation`, Chapter Fourteen):** a **Qi**
+bar appears, refilled every turn by the core (Ch 17 combat regeneration),
+and *Qi Palm* joins the Techniques menu.
+
+**After the plateau spar (`technique_mapping`, Chapter Seventeen):** she
+copies any copyable enemy technique on first observation, optimised
+(+10% output, -15% cost), and carries the Flame Path techniques she learned
+from Elder Shen (*Compression Palm*, *Thousand-Year Ember*).
 
 ### Ideas for later
 

@@ -9,6 +9,7 @@ var data: CombatantData
 var is_player := false
 var hp: int
 var qi: int
+var nano: int
 var heat := 0
 ## Charge time; the combatant acts when it reaches CT_READY.
 var ct := 0.0
@@ -24,6 +25,7 @@ func _init(p_data: CombatantData, p_is_player := false) -> void:
 	is_player = p_is_player
 	hp = data.max_hp
 	qi = data.max_qi
+	nano = data.max_nano
 	skills = data.skills.duplicate()
 
 
@@ -39,7 +41,7 @@ func is_alive() -> bool:
 
 
 func can_use(skill: SkillData) -> bool:
-	return qi >= skill.qi_cost and heat >= skill.heat_cost
+	return qi >= skill.qi_cost and heat >= skill.heat_cost and nano >= skill.nano_cost
 
 
 func knows(skill_id: StringName) -> bool:

@@ -3,7 +3,7 @@ extends Resource
 ## A battle action: basic strikes, qi techniques, nanobot repair, the stellar
 ## discharge, and the monster techniques Baihua can copy.
 
-enum Kind { PHYSICAL, QI, HEAL, GUARD, STELLAR }
+enum Kind { PHYSICAL, QI, HEAL, GUARD, STELLAR, MARK }
 enum Target { ONE_ENEMY, ALL_ENEMIES, SELF }
 
 @export var id: StringName
@@ -14,6 +14,10 @@ enum Target { ONE_ENEMY, ALL_ENEMIES, SELF }
 ## Damage multiplier for attacks; fraction of max HP for heals.
 @export var power := 1.0
 @export var qi_cost := 0
+## Nanobot colony mass consumed (percent).
+@export var nano_cost := 0
+## Story flag that unlocks the skill for Baihua (empty = always available).
+@export var requires_flag: StringName = &""
 ## Stellar core heat gained by using the skill.
 @export var heat_gain := 0
 ## Heat required (and consumed) to use the skill.
@@ -27,6 +31,10 @@ enum Target { ONE_ENEMY, ALL_ENEMIES, SELF }
 @export var fx_color := Color.WHITE
 ## Set on copies produced by Baihua's technique mapping.
 @export var optimized := false
+
+
+func is_qi_technique() -> bool:
+	return kind == Kind.QI or optimized
 
 
 func is_offensive() -> bool:

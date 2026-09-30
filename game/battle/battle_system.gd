@@ -8,6 +8,7 @@ enum Outcome { ONGOING, VICTORY, DEFEAT }
 
 const HEAT_ON_HIT := 8
 const CORRODE_FRACTION := 0.05
+const ASSESSED_BONUS := 1.35
 
 var party: Array[Combatant] = []
 var enemies: Array[Combatant] = []
@@ -102,6 +103,12 @@ func begin_turn(actor: Combatant) -> Array[String]:
 	actor.guarding = false
 	if actor.data.qi_regen > 0 and actor.qi < actor.data.max_qi:
 		actor.qi = mini(actor.data.max_qi, actor.qi + actor.data.qi_regen)
+	if actor.data.nano_regen > 0 and actor.nano < actor.data.max_nano:
+		actor.nano = mini(actor.data.max_nano, actor.nano + actor.data.nano_regen)
+	if actor.statuses.has(&"assessed"):
+		actor.statuses[&"assessed"] -= 1
+		if actor.statuses[&"assessed"] <= 0:
+			actor.statuses.erase(&"assessed")
 	if actor.statuses.has(&"corroded"):
 		var dmg := maxi(1, roundi(actor.data.max_hp * CORRODE_FRACTION))
 		actor.hp = maxi(0, actor.hp - dmg)
@@ -138,6 +145,7 @@ func default_targets(actor: Combatant, skill: SkillData, picked: Combatant = nul
 func execute(actor: Combatant, skill: SkillData, targets: Array[Combatant]) -> Dictionary:
 	assert(actor.can_use(skill), "%s cannot use %s" % [actor.display_name, skill.display_name])
 	actor.qi -= skill.qi_cost
+	actor.nano -= skill.nano_cost
 	actor.heat -= skill.heat_cost
 	actor.add_heat(skill.heat_gain)
 
@@ -153,6 +161,10 @@ func execute(actor: Combatant, skill: SkillData, targets: Array[Combatant]) -> D
 		SkillData.Kind.GUARD:
 			actor.guarding = true
 			actor.qi = mini(actor.data.max_qi, actor.qi + roundi(actor.data.max_qi * 0.15))
+		SkillData.Kind.MARK:
+			for t in targets:
+				t.statuses[&"assessed"] = skill.inflict_turns
+				result.hits.append({ "target": t, "amount": 0, "heal": false, "killed": false, "status": &"assessed" })
 		_:
 			for t in targets:
 				result.hits.append(_hit(actor, skill, t))
@@ -167,6 +179,9 @@ func _hit(actor: Combatant, skill: SkillData, target: Combatant) -> Dictionary:
 	var mitigation := float(target.data.defense if physical else target.data.resistance)
 	var raw := skill.power * offence * 100.0 / (100.0 + mitigation * 2.0)
 	var amount := maxi(1, roundi(raw * rng.randf_range(0.9, 1.1)))
+	# A sensor-mapped target: she knows exactly where to hit.
+	if target.statuses.has(&"assessed"):
+		amount = roundi(amount * ASSESSED_BONUS)
 	if target.guarding:
 		amount = maxi(1, roundi(amount * 0.5))
 	target.hp = maxi(0, target.hp - amount)
@@ -186,7 +201,7 @@ func _try_copy(actor: Combatant, skill: SkillData, result: Dictionary) -> void:
 	for observer in living(foes_of(actor)):
 		if observer.data.can_copy and not observer.knows(skill.id):
 			var copy := skill.make_optimized_copy()
-			observer.skills.insert(maxi(0, observer.skills.size() - 1), copy)
+			_insert_learned(observer, copy)
 			result.learned = copy
 			result.log.append("Cognitive core mapped %s. Optimised: +10%% output, -15%% qi." % skill.display_name)
 
@@ -205,6 +220,17 @@ func total_reward() -> int:
 	for e in enemies:
 		total += e.data.reward_stones
 	return total
+
+
+## Copied techniques go just before Stellar Discharge so the command list
+## keeps its shape.
+static func _insert_learned(observer: Combatant, copy: SkillData) -> void:
+	var at := observer.skills.size()
+	for i in observer.skills.size():
+		if observer.skills[i].kind == SkillData.Kind.STELLAR:
+			at = i
+			break
+	observer.skills.insert(at, copy)
 
 
 ## Opening line in Baihua's diagnostic voice.

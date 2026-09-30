@@ -37,7 +37,7 @@ var _selector: MeshInstance3D
 func _ready() -> void:
 	var enc_id: StringName = GameState.pending_encounter.get("id", &"ridge_wolves")
 	_encounter = Db.encounter(enc_id)
-	var party: Array[Combatant] = [Combatant.new(Db.combatant(&"baihua"), true)]
+	var party: Array[Combatant] = [Combatant.new(Db.player_data(GameState.flags), true)]
 	var enemies: Array[Combatant] = []
 	var counts := {}
 	for enemy_id: StringName in _encounter.enemies:
@@ -188,8 +188,12 @@ func _build_ui() -> void:
 		status_box.add_child(name_row)
 		var hp := UITheme.bar(Color("7fd18b"))
 		var qi := UITheme.bar(Color("b89bff"))
+		var nano := UITheme.bar(Color("8fd8e8"))
 		var heat := UITheme.bar(Color("ffae4a"))
-		for pair: Array in [["Integrity", hp], ["Qi", qi], ["Core heat", heat]]:
+		var rows: Array = [["Integrity", hp], ["Core heat", heat], ["Nanobots", nano]]
+		if c.data.max_qi > 0:
+			rows.append(["Qi", qi])
+		for pair: Array in rows:
 			var row := HBoxContainer.new()
 			var l := Label.new()
 			l.text = pair[0]
@@ -200,7 +204,7 @@ func _build_ui() -> void:
 			pair[1].size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			row.add_child(pair[1])
 			status_box.add_child(row)
-		_status[c] = { "hp": hp, "qi": qi, "heat": heat, "hp_text": hp_text }
+		_status[c] = { "hp": hp, "qi": qi, "nano": nano, "heat": heat, "hp_text": hp_text }
 
 	_log_label = Label.new()
 	_log_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -258,12 +262,19 @@ func _refresh() -> void:
 		s.hp_text.text = "%d/%d" % [c.hp, c.data.max_hp]
 		s.qi.max_value = maxi(1, c.data.max_qi)
 		s.qi.value = c.qi
+		s.nano.max_value = maxi(1, c.data.max_nano)
+		s.nano.value = c.nano
 		s.heat.max_value = Combatant.MAX_HEAT
 		s.heat.value = c.heat
 	for c: Combatant in _name_labels:
 		var label: Label3D = _name_labels[c]
-		label.text = "%s\n%d/%d%s" % [c.display_name, c.hp, c.data.max_hp, "  [corroded]" if c.statuses.has(&"corroded") else ""]
-		label.modulate = Color(1, 0.55, 0.5) if c.statuses.has(&"corroded") else Color.WHITE
+		var tags := ""
+		if c.statuses.has(&"corroded"):
+			tags += "  [corroded]"
+		if c.statuses.has(&"assessed"):
+			tags += "  [mapped]"
+		label.text = "%s\n%d/%d%s" % [c.display_name, c.hp, c.data.max_hp, tags]
+		label.modulate = Color(1, 0.55, 0.5) if c.statuses.has(&"corroded") else (Color(0.75, 0.85, 1.0) if c.statuses.has(&"assessed") else Color.WHITE)
 	var names := system.turn_order_preview(5).map(func(c: Combatant) -> String: return c.display_name)
 	_order_label.text = "Turn order\n" + "\n".join(PackedStringArray(names))
 
@@ -358,7 +369,7 @@ func _clear_commands() -> void:
 
 func _place_command_panel() -> void:
 	_command_panel.visible = true
-	_command_box.columns = clampi(_command_box.get_child_count(), 1, 5)
+	_command_box.columns = clampi(_command_box.get_child_count(), 1, 6)
 	_command_panel.reset_size()
 	var vp := get_viewport().get_visible_rect().size
 	await get_tree().process_frame
@@ -374,9 +385,12 @@ func _show_main_commands(actor: Combatant) -> void:
 	for s in actor.skills:
 		by_id[s.id] = s
 	_command_box.add_child(_skill_button(actor, by_id[&"strike"], "Strike"))
-	var techniques := UITheme.button("Techniques", func() -> void: _show_techniques(actor), 220)
-	_command_box.add_child(techniques)
-	_command_box.add_child(_skill_button(actor, by_id[&"nanobot_repair"], "Repair (%d qi)" % by_id[&"nanobot_repair"].qi_cost))
+	_command_box.add_child(_skill_button(actor, by_id[&"core_surge"], "Core Surge (%d)" % by_id[&"core_surge"].heat_cost))
+	if actor.skills.any(func(s: SkillData) -> bool: return s.is_qi_technique()):
+		_command_box.add_child(UITheme.button("Techniques", func() -> void: _show_techniques(actor), 190))
+	else:
+		_command_box.add_child(_skill_button(actor, by_id[&"assess"], "Sensor Sweep"))
+	_command_box.add_child(_skill_button(actor, by_id[&"nanobot_repair"], "Repair (%d%%)" % by_id[&"nanobot_repair"].nano_cost))
 	_command_box.add_child(_skill_button(actor, by_id[&"stillness"], "Stillness"))
 	var stellar := _skill_button(actor, by_id[&"stellar_discharge"], "STELLAR CORE" if actor.heat >= Combatant.MAX_HEAT else "Stellar Core (%d%%)" % actor.heat)
 	if not stellar.disabled:
@@ -391,15 +405,17 @@ func _show_main_commands(actor: Combatant) -> void:
 func _show_techniques(actor: Combatant) -> void:
 	_clear_commands()
 	for s in actor.skills:
-		if s.kind == SkillData.Kind.QI or s.optimized:
+		if s.is_qi_technique():
 			var label := "%s%s (%d qi)" % [s.display_name, " *" if s.optimized else "", s.qi_cost]
 			_command_box.add_child(_skill_button(actor, s, label))
-	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 220))
+	if actor.knows(&"assess"):
+		_command_box.add_child(_skill_button(actor, actor.skills.filter(func(s: SkillData) -> bool: return s.id == &"assess")[0], "Sensor Sweep"))
+	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 190))
 	_place_command_panel()
 
 
 func _skill_button(actor: Combatant, skill: SkillData, text: String) -> Button:
-	var b := UITheme.button(text, func() -> void: _on_skill_picked(actor, skill), 220)
+	var b := UITheme.button(text, func() -> void: _on_skill_picked(actor, skill), 190)
 	b.disabled = not actor.can_use(skill)
 	b.tooltip_text = skill.description
 	return b
@@ -412,7 +428,7 @@ func _on_skill_picked(actor: Combatant, skill: SkillData) -> void:
 		return
 	_targeting_skill = skill
 	_clear_commands()
-	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 220))
+	_command_box.add_child(UITheme.button("Back", func() -> void: _show_main_commands(actor), 190))
 	_place_command_panel()
 	_hint_label.text = "Tap a target for %s" % skill.display_name
 	_hint_label.visible = true
@@ -487,6 +503,8 @@ func _animate(result: Dictionary) -> void:
 			SpriteSheets.play_then_idle(sprite, &"cast")
 			await _cast_glow(node, skill.fx_color, 0.5)
 			_apply_hits(hits, skill)
+		SkillData.Kind.MARK:
+			await _sensor_sweep(node, hits, skill)
 		SkillData.Kind.GUARD:
 			await _cast_glow(node, skill.fx_color, 0.4)
 			HD2D.pop_label(self, node.position + Vector3(0, 2.0, 0), "Guard", skill.fx_color, 48)
@@ -500,12 +518,34 @@ func _animate(result: Dictionary) -> void:
 			await _defeat_actor(hit.target)
 
 
+## A scan line passes over the target and it reads as mapped.
+func _sensor_sweep(node: Node3D, hits: Array, skill: SkillData) -> void:
+	for hit: Dictionary in hits:
+		var target_node: Node3D = _actors[hit.target]
+		var h := SpriteSheets.height_m(hit.target.data.sprite_id)
+		var plane := QuadMesh.new()
+		plane.size = Vector2(h * 1.3, 0.05)
+		var mat := HD2D.material(skill.fx_color, 0.3, 0.0, skill.fx_color, 6.0)
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		var line := HD2D.add_mesh(self, plane, mat, target_node.position + Vector3(0, h + 0.2, 0))
+		var t := create_tween()
+		t.tween_property(line, "position:y", target_node.position.y, 0.45)
+		t.tween_callback(line.queue_free)
+		HD2D.pop_label(self, target_node.position + Vector3(0, h + 0.4, 0), "Mapped", skill.fx_color, 40)
+		_flash(hit.target, Color(0.7, 0.85, 1.4))
+	await _wait(0.5)
+	_refresh()
+
+
 func _apply_hits(hits: Array, skill: SkillData) -> void:
 	for hit: Dictionary in hits:
 		var target: Combatant = hit.target
 		var node: Node3D = _actors[target]
 		if hit.heal:
 			HD2D.pop_label(self, node.position + Vector3(0, 1.8, 0), "+%d" % hit.amount, Color("8fffb0"))
+			continue
+		if hit.amount == 0 and hit.status == &"assessed":
 			continue
 		var color := Color(1.0, 0.9, 0.6) if skill.kind != SkillData.Kind.PHYSICAL else Color.WHITE
 		HD2D.pop_label(self, node.position + Vector3(0, 1.6, 0), str(hit.amount), color)

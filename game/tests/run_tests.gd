@@ -23,8 +23,12 @@ func check(condition: bool, message: String) -> void:
 		printerr("FAIL: ", message)
 
 
-func _battle(enemy_ids: Array, seed_value := 1234) -> BattleSystem:
-	var party: Array[Combatant] = [Combatant.new(Db.combatant(&"baihua"), true)]
+const CHAPTER_ONE := {}
+const SECT := {"cultivation": true, "technique_mapping": true}
+
+
+func _battle(enemy_ids: Array, seed_value := 1234, flags: Dictionary = SECT) -> BattleSystem:
+	var party: Array[Combatant] = [Combatant.new(Db.player_data(flags), true)]
 	var enemies: Array[Combatant] = []
 	for id: StringName in enemy_ids:
 		enemies.append(Combatant.new(Db.combatant(id)))
@@ -58,6 +62,59 @@ func test_strike_damages_and_builds_heat() -> void:
 	check(wolf.hp < wolf.data.max_hp, "strike should damage the wolf")
 	check(result.hits[0].amount > 0, "hit amount recorded")
 	check(baihua.heat == 15, "strike adds 15 heat, got %d" % baihua.heat)
+
+
+func test_chapter_one_kit_has_no_qi() -> void:
+	var system := _battle([&"acid_fang_wolf"], 1, CHAPTER_ONE)
+	var baihua := system.party[0]
+	check(baihua.data.max_qi == 0, "no qi before cultivation")
+	check(not baihua.skills.any(func(s: SkillData) -> bool: return s.is_qi_technique()), "no qi techniques before cultivation")
+	check(baihua.knows(&"strike") and baihua.knows(&"core_surge") and baihua.knows(&"assess") and baihua.knows(&"nanobot_repair") and baihua.knows(&"stellar_discharge"), "chassis kit present")
+	check(not baihua.data.can_copy, "no technique mapping before Chapter Seventeen")
+	var result := system.execute(system.enemies[0], Db.skill(&"acid_fang"), [baihua])
+	check(result.learned == null, "Chapter One Baihua cannot copy techniques")
+	var cultivated := _battle([&"acid_fang_wolf"], 1, {"cultivation": true})
+	check(cultivated.party[0].data.max_qi > 0 and cultivated.party[0].knows(&"qi_palm"), "cultivation unlocks qi")
+	check(not cultivated.party[0].knows(&"compression_palm"), "Flame Path copies need technique mapping")
+
+
+func test_nanobot_repair_costs_colony_mass_and_regrows() -> void:
+	var system := _battle([&"acid_fang_wolf"], 1, CHAPTER_ONE)
+	var baihua := system.party[0]
+	baihua.hp = 100
+	var repair := Db.skill(&"nanobot_repair")
+	system.execute(baihua, repair, [baihua])
+	check(baihua.hp == 100 + roundi(baihua.data.max_hp * 0.3), "repair restores 30%")
+	check(baihua.nano == 100 - repair.nano_cost, "repair spends colony mass")
+	system.begin_turn(baihua)
+	check(baihua.nano == 100 - repair.nano_cost + baihua.data.nano_regen, "colony regrows each turn")
+	baihua.nano = 10
+	check(not baihua.can_use(repair), "repair unavailable when the colony is depleted")
+
+
+func test_core_surge_spends_heat() -> void:
+	var system := _battle([&"quill_bear"], 1, CHAPTER_ONE)
+	var baihua := system.party[0]
+	var surge := Db.skill(&"core_surge")
+	check(not baihua.can_use(surge), "surge needs heat")
+	baihua.heat = 60
+	var r := system.execute(baihua, surge, [system.enemies[0]])
+	check(baihua.heat == 20, "surge spends 40 heat, left %d" % baihua.heat)
+	check(r.hits[0].amount > 60, "surge hits hard (%d)" % r.hits[0].amount)
+
+
+func test_sensor_sweep_marks_target() -> void:
+	var a := _battle([&"quill_bear"], 5, CHAPTER_ONE)
+	var b := _battle([&"quill_bear"], 5, CHAPTER_ONE)
+	var strike := Db.skill(&"strike")
+	var plain: int = a.execute(a.party[0], strike, [a.enemies[0]]).hits[0].amount
+	var mark := b.execute(b.party[0], Db.skill(&"assess"), [b.enemies[0]])
+	check(mark.hits[0].status == &"assessed" and b.enemies[0].statuses.has(&"assessed"), "target is mapped")
+	var boosted: int = b.execute(b.party[0], strike, [b.enemies[0]]).hits[0].amount
+	check(boosted > plain, "mapped target takes more damage (%d vs %d)" % [boosted, plain])
+	for i in 3:
+		b.begin_turn(b.enemies[0])
+	check(not b.enemies[0].statuses.has(&"assessed"), "mapping expires")
 
 
 func test_stellar_discharge_needs_full_heat() -> void:
@@ -119,9 +176,10 @@ func test_guard_halves_damage() -> void:
 
 
 func test_full_battle_simulation_finishes() -> void:
-	# Baihua on autopilot: stellar when ready, heal when low, otherwise strike.
+	# Chapter One Baihua on autopilot: stellar when ready, surge when hot,
+	# heal when low, otherwise strike.
 	for encounter_id: StringName in [&"ridge_wolves", &"ridge_bear", &"ridge_wolf_demon"]:
-		var system := _battle(Db.encounter(encounter_id).enemies, 7)
+		var system := _battle(Db.encounter(encounter_id).enemies, 7, CHAPTER_ONE)
 		var turns := 0
 		while system.outcome() == BattleSystem.Outcome.ONGOING and turns < 200:
 			turns += 1
@@ -135,6 +193,8 @@ func test_full_battle_simulation_finishes() -> void:
 					skill = Db.skill(&"stellar_discharge")
 				elif actor.hp < actor.data.max_hp * 0.4 and actor.can_use(Db.skill(&"nanobot_repair")):
 					skill = Db.skill(&"nanobot_repair")
+				elif actor.heat >= 80 and actor.can_use(Db.skill(&"core_surge")):
+					skill = Db.skill(&"core_surge")
 				else:
 					skill = Db.skill(&"strike")
 				system.execute(actor, skill, system.default_targets(actor, skill))

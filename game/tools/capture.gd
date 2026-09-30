@@ -11,6 +11,7 @@ const SHOTS := [
 	{ "scene": SceneRouter.BATTLE, "wait": 5.0, "name": "04-battle", "encounter": &"ridge_wolves" },
 	{ "scene": SceneRouter.BATTLE, "wait": 5.0, "name": "05-battle-bear", "encounter": &"ridge_bear" },
 	{ "scene": SceneRouter.BATTLE, "wait": 5.0, "name": "06-stellar-core", "encounter": &"ridge_wolves", "stellar": 1.25 },
+	{ "scene": SceneRouter.BATTLE, "wait": 5.0, "name": "07-battle-cultivation", "encounter": &"ridge_wolf_demon", "flags": ["robe", "cultivation", "technique_mapping"] },
 ]
 
 
@@ -26,6 +27,8 @@ func _ready() -> void:
 	Settings.quality = Settings.Quality.HIGH
 	for shot: Dictionary in SHOTS:
 		GameState.new_game()
+		for f: String in shot.get("flags", []):
+			GameState.set_flag(StringName(f))
 		GameState.pending_encounter = { "id": shot.get("encounter", &"ridge_wolves") }
 		get_tree().change_scene_to_file(shot.scene)
 		await get_tree().create_timer(shot.wait).timeout

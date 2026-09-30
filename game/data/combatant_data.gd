@@ -14,6 +14,10 @@ extends Resource
 @export var skills: Array[SkillData] = []
 ## Qi restored at the start of each turn (Baihua's core-driven regeneration).
 @export var qi_regen := 0
+## Nanobot colony mass (percent). 0 = no colony.
+@export var max_nano := 0
+## Colony mass regrown each turn.
+@export var nano_regen := 0
 ## Can observe and copy enemy techniques.
 @export var can_copy := false
 ## Has a stellar core heat gauge.

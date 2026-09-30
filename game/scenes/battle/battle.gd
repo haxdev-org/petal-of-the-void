@@ -385,14 +385,14 @@ func _show_main_commands(actor: Combatant) -> void:
 	for s in actor.skills:
 		by_id[s.id] = s
 	_command_box.add_child(_skill_button(actor, by_id[&"strike"], "Strike"))
-	_command_box.add_child(_skill_button(actor, by_id[&"core_surge"], "Core Surge (%d)" % by_id[&"core_surge"].heat_cost))
+	_command_box.add_child(_skill_button(actor, by_id[&"core_surge"], "Surge (%d heat)" % by_id[&"core_surge"].heat_cost))
 	if actor.skills.any(func(s: SkillData) -> bool: return s.is_qi_technique()):
 		_command_box.add_child(UITheme.button("Techniques", func() -> void: _show_techniques(actor), 172))
 	else:
-		_command_box.add_child(_skill_button(actor, by_id[&"assess"], "Sensor Sweep"))
-	_command_box.add_child(_skill_button(actor, by_id[&"nanobot_repair"], "Repair (%d%%)" % by_id[&"nanobot_repair"].nano_cost))
+		_command_box.add_child(_skill_button(actor, by_id[&"assess"], "Sweep"))
+	_command_box.add_child(_skill_button(actor, by_id[&"nanobot_repair"], "Repair %d%%" % by_id[&"nanobot_repair"].nano_cost))
 	_command_box.add_child(_skill_button(actor, by_id[&"stillness"], "Stillness"))
-	var stellar := _skill_button(actor, by_id[&"stellar_discharge"], "STELLAR CORE" if actor.heat >= Combatant.MAX_HEAT else "Stellar Core (%d%%)" % actor.heat)
+	var stellar := _skill_button(actor, by_id[&"stellar_discharge"], "STELLAR" if actor.heat >= Combatant.MAX_HEAT else "Stellar %d%%" % actor.heat)
 	if not stellar.disabled:
 		stellar.add_theme_color_override("font_color", UITheme.GOLD)
 		var pulse := stellar.create_tween().set_loops()
